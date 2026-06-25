@@ -142,15 +142,20 @@ router.post("/campaigns/:id/send", async (req, res): Promise<void> => {
         }
       }
     } else {
-      // Simulate sending (no account connected)
-      sent = Math.min(leads.length, 10);
-      failed = 0;
+      // No email account — return clear error, do not simulate sending
+      res.status(400).json({
+        error: "No email account connected",
+        message: "Connect an email account in Settings before sending campaigns.",
+        sent: 0,
+        failed: 0,
+      });
+      return;
     }
 
     await db.update(campaignsTable).set({ status: "Sent", sentCount: sent, recipientCount: leads.length }).where(eq(campaignsTable.id, id));
     await db.insert(activityTable).values({ type: "campaign_sent", description: `Campaign "${campaign.name}" sent to ${sent} recipients`, entityId: String(id), entityType: "campaign" });
 
-    res.json({ sent, failed, message: sent > 0 ? `Successfully sent to ${sent} recipients` : "No email account connected — connect one in Settings" });
+    res.json({ sent, failed, message: `Successfully sent to ${sent} recipients` });
   } catch (err) {
     req.log.error({ err }, "send campaign failed");
     res.status(500).json({ error: "Failed to send campaign" });
