@@ -1,0 +1,43 @@
+{
+  "name": "LaunchPad — AI Sales Platform",
+  "short_name": "LaunchPad",
+  "description": "AI-powered lead generation, email outreach, and MVP project builder",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "New Lead",
+      "url": "/leads",
+      "description": "Add a new lead"
+    },
+    {
+      "name": "AI Chat",
+      "url": "/chat",
+      "description": "Open AI assistant"
+    },
+    {
+      "name": "Generate MVP",
+      "url": "/projects/new",
+      "description": "Generate a new MVP"
+    }
+  ],
+  "prefer_related_applications": false
+}
