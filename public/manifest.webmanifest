@@ -1,0 +1,62 @@
+{
+  "name": "LeadForge",
+  "short_name": "LeadForge",
+  "description": "Autonomous revenue workspace — leads, outreach, deals, and payments.",
+  "start_url": "/chat",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0b0610",
+  "theme_color": "#0b0610",
+  "icons": [
+    {
+      "src": "/leadforge-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/leadforge-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/leadforge-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Chat",
+      "short_name": "Chat",
+      "url": "/chat",
+      "description": "Open the command interface",
+      "icons": [{ "src": "/leadforge-icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Leads",
+      "short_name": "Leads",
+      "url": "/leads",
+      "description": "View and search leads",
+      "icons": [{ "src": "/leadforge-icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Deals",
+      "short_name": "Deals",
+      "url": "/deals",
+      "description": "View deal board",
+      "icons": [{ "src": "/leadforge-icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Payments",
+      "short_name": "Payments",
+      "url": "/payments",
+      "description": "View and manage payments",
+      "icons": [{ "src": "/leadforge-icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

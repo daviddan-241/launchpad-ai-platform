@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: leadforge
+    env: docker
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /login
+    dockerfilePath: ./Dockerfile
+    disk:
+      name: leadforge-data
+      mountPath: /var/data/leadforge
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data/leadforge
+      - key: APP_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-1.5-flash
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.1-8b-instant
+      - key: FLUTTERWAVE_SECRET_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: APP_ENCRYPTION_KEY
+        generateValue: true
+      - key: SCHEDULER_SECRET
+        generateValue: true
+      - key: FLUTTERWAVE_WEBHOOK_HASH
+        sync: false
