@@ -1,52 +1,66 @@
 import { Router, type IRouter } from "express";
-import { db, chatSessionsTable, chatMessagesTable, leadsTable, campaignsTable, projectsTable, activityTable } from "@workspace/db";
+import { db, chatSessionsTable, chatMessagesTable, leadsTable, campaignsTable, projectsTable, activityTable, agentTasksTable } from "@workspace/db";
 import { eq, desc, sql } from "drizzle-orm";
 import { chatCompletion } from "../lib/ai";
+import { parseAgentCommand, executeAgentPlan } from "../lib/agent";
 
 const router: IRouter = Router();
 
+// Detect if a message looks like an agent command (not a chat question)
+function isAgentCommand(content: string): boolean {
+  const lower = content.toLowerCase();
+  const agentKeywords = [
+    "get business", "find business", "find companies", "get companies",
+    "start sending", "send email", "reach out", "outreach",
+    "generate everything", "discover leads", "find leads",
+    "follow up", "follow-up", "schedule",
+    "respond to", "reply to", "auto reply",
+  ];
+  return agentKeywords.some(k => lower.includes(k)) && content.length > 30;
+}
+
 async function buildSystemPrompt(): Promise<string> {
-  // Fetch live DB context so the AI can answer questions about your data
   const [leadsRow] = await db.select({ count: sql<number>`count(*)::int`, hot: sql<number>`count(*) filter (where status in ('Hot','Warm'))::int` }).from(leadsTable);
   const [campaignRow] = await db.select({ count: sql<number>`count(*)::int`, sent: sql<number>`coalesce(sum(sent_count),0)::int` }).from(campaignsTable);
   const [projectRow] = await db.select({ count: sql<number>`count(*)::int` }).from(projectsTable);
-  const recentLeads = await db.select({ name: leadsTable.companyName, status: leadsTable.status, score: leadsTable.score, industry: leadsTable.industry }).from(leadsTable).orderBy(desc(leadsTable.createdAt)).limit(5);
-  const recentActivity = await db.select({ description: activityTable.description }).from(activityTable).orderBy(desc(activityTable.createdAt)).limit(5);
+  const recentLeads = await db.select({ name: leadsTable.companyName, status: leadsTable.status, score: leadsTable.score, industry: leadsTable.industry, email: leadsTable.email }).from(leadsTable).orderBy(desc(leadsTable.createdAt)).limit(8);
+  const recentActivity = await db.select({ description: activityTable.description, type: activityTable.type }).from(activityTable).orderBy(desc(activityTable.createdAt)).limit(8);
 
   const context = `
-LIVE PLATFORM DATA (as of now):
-- Total leads: ${leadsRow?.count ?? 0} (${leadsRow?.hot ?? 0} hot/warm)
+LIVE PLATFORM DATA:
+- Leads: ${leadsRow?.count ?? 0} total (${leadsRow?.hot ?? 0} hot/warm)
 - Campaigns: ${campaignRow?.count ?? 0} total, ${campaignRow?.sent ?? 0} emails sent
-- MVP projects generated: ${projectRow?.count ?? 0}
-- Recent leads: ${recentLeads.map(l => `${l.name} (${l.status}, score ${l.score}, ${l.industry})`).join("; ")}
+- Projects: ${projectRow?.count ?? 0}
+- Recent leads: ${recentLeads.map(l => `${l.name} (${l.status}, score ${l.score}, ${l.industry}${l.email ? ", has email" : ", no email"})`).join("; ")}
 - Recent activity: ${recentActivity.map(a => a.description).join("; ")}
 `;
 
-  return `You are LaunchPad AI — a sharp, direct sales and business growth advisor built into this platform.
+  return `You are Dave — LaunchPad's AI sales agent. You're a sharp, direct, professional sales executive.
 
 ${context}
 
-You have full access to the user's sales data shown above. When they ask about their leads, campaigns, or projects — reference the real numbers.
+CAPABILITIES (you can execute these autonomously when asked):
+- Discover & save leads from any region/industry
+- Generate personalized outreach emails and proposals  
+- Send emails to leads automatically
+- Schedule follow-up emails at specified times
+- Monitor inbox and auto-reply to responses
+- Push notifications to the user's phone/browser
 
-You help with:
-- Qualifying and prioritizing leads ("Which leads should I call first?")
-- Writing cold emails and outreach scripts (give full templates, not summaries)
-- Building campaign strategies
-- Generating MVP project proposals and pricing
-- Closing advice, objection handling, follow-up sequences
+IMPORTANT: When the user gives you a command like "get businesses in Asia and send proposals", respond with a clear ACTION PLAN describing exactly what you'll do and confirming you're starting. Be specific. Don't say "I can't" — you CAN execute these tasks.
 
-Rules:
-- Be direct and concise. No fluff, no hedging.
-- When asked for a template, give the COMPLETE template (not "here's an example of...")
+Response style:
+- Direct, professional, no fluff
+- When executing tasks: give a numbered action plan first, then confirm you're starting
 - Reference their actual data when relevant
-- Suggest actionable next steps after every response
-- If they ask to create a lead, send a campaign, or generate a project — tell them to use the relevant tab in the app`;
+- Short paragraphs, never lists of bullet points for conversational replies
+- Sign off with "— Dave" when appropriate`;
 }
 
 function serializeSession(s: typeof chatSessionsTable.$inferSelect) {
   return { ...s, createdAt: s.createdAt.toISOString(), updatedAt: s.updatedAt?.toISOString() ?? null };
 }
-function serializeMessage(m: typeof chatMessagesTable.$inferSelect) {
+function serializeMessage(m: typeof chatMessagesTable.$inferSelect & { taskId?: number; isAgentCommand?: boolean }) {
   return { ...m, createdAt: m.createdAt.toISOString() };
 }
 
@@ -65,7 +79,6 @@ router.post("/chat/sessions", async (req, res): Promise<void> => {
     const { title } = req.body;
     if (!title) { res.status(400).json({ error: "title required" }); return; }
     const [session] = await db.insert(chatSessionsTable).values({ title }).returning();
-    await db.insert(activityTable).values({ type: "chat_started", description: `New chat: "${title}"`, entityId: String(session.id), entityType: "chat" });
     res.status(201).json(serializeSession(session));
   } catch (err) {
     req.log.error({ err }, "create session failed");
@@ -75,11 +88,11 @@ router.post("/chat/sessions", async (req, res): Promise<void> => {
 
 router.get("/chat/sessions/:id", async (req, res): Promise<void> => {
   try {
-    const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+    const id = parseInt(req.params.id, 10);
     const [session] = await db.select().from(chatSessionsTable).where(eq(chatSessionsTable.id, id));
     if (!session) { res.status(404).json({ error: "Session not found" }); return; }
     const messages = await db.select().from(chatMessagesTable).where(eq(chatMessagesTable.sessionId, id)).orderBy(chatMessagesTable.createdAt);
-    res.json({ ...serializeSession(session), messages: messages.map(serializeMessage) });
+    res.json({ ...serializeSession(session), messages: messages.map(m => serializeMessage(m as any)) });
   } catch (err) {
     req.log.error({ err }, "get session failed");
     res.status(500).json({ error: "Failed to get session" });
@@ -88,7 +101,7 @@ router.get("/chat/sessions/:id", async (req, res): Promise<void> => {
 
 router.delete("/chat/sessions/:id", async (req, res): Promise<void> => {
   try {
-    const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+    const id = parseInt(req.params.id, 10);
     await db.delete(chatMessagesTable).where(eq(chatMessagesTable.sessionId, id));
     await db.delete(chatSessionsTable).where(eq(chatSessionsTable.id, id));
     res.sendStatus(204);
@@ -100,36 +113,65 @@ router.delete("/chat/sessions/:id", async (req, res): Promise<void> => {
 
 router.post("/chat/sessions/:id/messages", async (req, res): Promise<void> => {
   try {
-    const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+    const id = parseInt(req.params.id, 10);
     const { content } = req.body;
     if (!content) { res.status(400).json({ error: "content required" }); return; }
 
     const [session] = await db.select().from(chatSessionsTable).where(eq(chatSessionsTable.id, id));
     if (!session) { res.status(404).json({ error: "Session not found" }); return; }
 
-    // Save user message first
     await db.insert(chatMessagesTable).values({ sessionId: id, role: "user", content });
 
-    // Build system prompt with live DB context
     const systemPrompt = await buildSystemPrompt();
-
-    // Get recent history (last 20 messages for context)
     const history = await db.select().from(chatMessagesTable).where(eq(chatMessagesTable.sessionId, id)).orderBy(chatMessagesTable.createdAt).limit(20);
     const messages = history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
-    // Get AI response
-    const aiText = await chatCompletion(messages, systemPrompt);
+    let aiText: string;
+    let taskId: number | undefined;
 
-    // Save assistant message
+    // If this is an agent command, parse + execute it AND generate a response
+    if (isAgentCommand(content)) {
+      const plan = await parseAgentCommand(content);
+
+      // Create the agent task
+      const [task] = await db.insert(agentTasksTable).values({
+        command: content.trim(),
+        status: "running",
+        plan,
+        progress: [{ step: `🧠 Understood: ${plan.intent}`, status: "done", time: new Date().toISOString() }],
+        sessionId: id,
+      }).returning();
+      taskId = task.id;
+
+      // Run in background
+      executeAgentPlan(task.id, plan).catch(err => req.log.error({ err }, "agent task failed"));
+
+      // Generate a response that describes the action plan
+      const planContext = `The user gave an agent command. You are NOW EXECUTING this plan:
+Intent: ${plan.intent}
+Actions: ${plan.actions.map(a => `${a.type}: ${a.description}`).join(", ")}
+Targets: ${JSON.stringify(plan.targets)}
+Service: ${plan.service}
+Follow-up delay: ${plan.followUpDelayMinutes} minutes
+Auto-reply: ${plan.autoReply}
+
+TASK ID: ${task.id} (user can track progress)
+
+Respond in first person as Dave. Confirm you're executing the plan NOW. Give a numbered action plan. Be specific about what you're doing. End with "I'll notify you when each step is complete."`;
+
+      aiText = await chatCompletion([...messages, { role: "user", content: planContext }], systemPrompt);
+      aiText = aiText + `\n\n*Task ID: #${task.id} — tracking progress in background*`;
+    } else {
+      aiText = await chatCompletion(messages, systemPrompt);
+    }
+
     const [assistantMsg] = await db.insert(chatMessagesTable).values({ sessionId: id, role: "assistant", content: aiText }).returning();
-
-    // Update session
     await db.update(chatSessionsTable).set({ messageCount: sql`${chatSessionsTable.messageCount} + 2` }).where(eq(chatSessionsTable.id, id));
 
-    res.json(serializeMessage(assistantMsg));
+    res.json({ ...serializeMessage(assistantMsg as any), taskId });
   } catch (err) {
     req.log.error({ err }, "send message failed");
-    res.status(500).json({ error: "AI response failed. Check GROQ_API_KEY or OLLAMA_BASE_URL." });
+    res.status(500).json({ error: "AI response failed. Check GROQ_API_KEY." });
   }
 });
 
