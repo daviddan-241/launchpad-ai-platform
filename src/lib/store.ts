@@ -219,6 +219,7 @@ export type AppStore = {
   deliveryProjects: DeliveryProject[];
   autonomousCampaigns: AutonomousCampaign[];
   portfolios: Array<{ id: string; html: string; createdAt: string }>;
+  seenInboxMessageIds: string[];
 };
 
 
@@ -290,6 +291,7 @@ function seedStore(): AppStore {
     deliveryProjects: [],
     autonomousCampaigns: [],
     portfolios: [],
+    seenInboxMessageIds: [],
   };
 }
 
@@ -318,6 +320,7 @@ async function ensureStore() {
       deliveryProjects: Array.isArray(parsed.deliveryProjects) ? parsed.deliveryProjects : [],
       autonomousCampaigns: Array.isArray(parsed.autonomousCampaigns) ? parsed.autonomousCampaigns : [],
       portfolios: Array.isArray(parsed.portfolios) ? parsed.portfolios : [],
+      seenInboxMessageIds: Array.isArray(parsed.seenInboxMessageIds) ? parsed.seenInboxMessageIds : [],
     };
 
     await fs.writeFile(dataPath, JSON.stringify(hydrated, null, 2));

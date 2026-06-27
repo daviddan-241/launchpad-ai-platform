@@ -34,12 +34,21 @@ export type Campaign = {
 export type InboxMessage = {
   id: string;
   from: string;
+  fromEmail?: string;
   company: string;
   subject: string;
   preview: string;
+  emailBody?: string;
   sentiment: "Positive" | "Neutral" | "At Risk";
   recommendedReply: string;
   receivedAt: string;
+  leadId?: string;
+  campaignId?: string;
+  campaignStepLeadId?: string;
+  externalMessageId?: string;
+  threadId?: string;
+  replySent?: boolean;
+  replySentAt?: string;
 };
 
 export type Workflow = {

@@ -1,41 +1,40 @@
-import { ReplyGenerator } from "@/components/reply-generator";
+import { InboxThread } from "@/components/inbox-thread";
+import { requireCurrentUser } from "@/lib/auth";
 import { readStore } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 export default async function InboxPage() {
+  const user = await requireCurrentUser();
   const store = await readStore();
+
+  const hasEmailAccount = store.emailAccounts.some((a) => a.userId === user.id);
 
   return (
     <div className="space-y-6">
       <section>
         <p className="text-xs uppercase tracking-[0.25em] text-fuchsia-300">Inbox</p>
-        <h1 className="mt-2 text-3xl font-semibold text-white">Reply intelligence + AI drafting</h1>
+        <h1 className="mt-2 text-3xl font-semibold text-white">AI reply inbox</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-300">
+          Polls your connected Gmail, Outlook, or SMTP account every 5 minutes for inbound prospect replies.
+          Each reply is matched to a known lead, routed into the right campaign thread, and given an AI-suggested response you can send with one click.
+        </p>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <section className="space-y-4">
-          {store.inbox.map((message) => (
-            <div key={message.id} className="rounded-[30px] border border-white/10 bg-white/5 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="font-semibold text-white">{message.from}</p>
-                  <p className="mt-1 text-sm text-slate-400">{message.company} · {message.receivedAt}</p>
-                </div>
-                <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">{message.sentiment}</span>
-              </div>
-              <p className="mt-4 text-white">{message.subject}</p>
-              <p className="mt-2 text-sm leading-7 text-slate-300">{message.preview}</p>
-              <div className="mt-4 rounded-3xl border border-white/8 bg-[#161022] p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-fuchsia-300">Suggested reply</p>
-                <p className="mt-2 text-sm leading-7 text-slate-300">{message.recommendedReply}</p>
-              </div>
-            </div>
-          ))}
-        </section>
+      {!hasEmailAccount && (
+        <div className="rounded-[28px] border border-amber-400/25 bg-amber-400/8 px-6 py-5">
+          <p className="font-semibold text-amber-200">No email account connected</p>
+          <p className="mt-1 text-sm text-amber-100/70">
+            Go to{" "}
+            <a href="/settings" className="underline hover:text-amber-100">
+              Settings → Email integrations
+            </a>{" "}
+            to connect Gmail, Outlook, or SMTP — then come back and click "Poll now" to pull in replies.
+          </p>
+        </div>
+      )}
 
-        <ReplyGenerator />
-      </div>
+      <InboxThread messages={store.inbox.slice(0, 100)} />
     </div>
   );
 }
