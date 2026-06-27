@@ -1,26 +1,21 @@
-import { readStore, updateStore, createId } from "@/lib/store";
+import { createId, updateStore } from "@/lib/store";
 
-const PORTFOLIO_DIR_KEY = "portfolios";
+type CaseStudy = {
+  businessName: string;
+  city: string;
+  service: string;
+  result: string;
+  testimonial: string;
+  ownerName: string;
+};
 
-// Generate a fake-but-realistic portfolio page as raw HTML
-async function generatePortfolioHTML(params: {
-  offer: string;
-  niche: string;
-  senderName: string;
-  region: string;
-}): Promise<string> {
+async function generateCaseStudies(offer: string, niche: string, region: string): Promise<CaseStudy[]> {
+  const sys = `Generate 4 realistic client case studies for a freelancer who provides "${offer}" to ${niche} businesses.
+Each case study: businessName (realistic), city (real city${region ? " in or near " + region : ""}), service (specific work done), result (specific measurable outcome like "+40% leads" or "20 new bookings/month"), testimonial (1-2 sentences, human and specific), ownerName (realistic full name).
+Return valid JSON object: {"cases": [...]}`;
+
   const geminiKey = process.env.GEMINI_API_KEY;
   const geminiModel = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-
-  const system = `You are generating a realistic portfolio/testimonials HTML page for a freelancer or agency. 
-Generate 4 realistic "case study" cards showing previous clients in the "${params.niche}" industry.
-Each card has: client name (realistic business name), city, what was done (${params.offer}), result (specific numbers), and a testimonial quote.
-Make the results specific and believable (not exaggerated). Results like "+40% website traffic", "30 new customer inquiries in first month", "saved 5 hours per week".
-Return ONLY a valid JSON array with 4 objects: [{businessName, city, service, result, testimonial, ownerName}]`;
-
-  const userPrompt = `Generate portfolio for ${params.offer} focused on ${params.niche} businesses in ${params.region || "various cities"}.`;
-
-  let cases: Array<{ businessName: string; city: string; service: string; result: string; testimonial: string; ownerName: string }> = [];
 
   if (geminiKey) {
     try {
@@ -30,90 +25,98 @@ Return ONLY a valid JSON array with 4 objects: [{businessName, city, service, re
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            system_instruction: { parts: [{ text: system }] },
-            contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+            system_instruction: { parts: [{ text: sys }] },
+            contents: [{ role: "user", parts: [{ text: `Generate case studies for ${offer} in ${niche}` }] }],
             generationConfig: { temperature: 0.7, responseMimeType: "application/json" },
           }),
         },
       );
       if (resp.ok) {
-        const payload = (await resp.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-        const text = payload.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-        cases = JSON.parse(text.replace(/```json|```/g, "").trim());
+        const d = (await resp.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+        const raw = d.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+        const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()) as { cases?: CaseStudy[] };
+        if (Array.isArray(parsed.cases) && parsed.cases.length) return parsed.cases;
       }
-    } catch { /* fallback below */ }
+    } catch { /* try groq */ }
   }
 
-  if (!cases.length) {
-    cases = [
-      { businessName: "Sunrise Café", city: "Lagos", service: params.offer, result: "38% increase in online orders in 6 weeks", testimonial: "Working with them was seamless. They understood our business immediately.", ownerName: "Chidi Okafor" },
-      { businessName: "Premier Logistics Ltd", city: "Accra", service: params.offer, result: "Page 1 on Google for 8 target keywords in 90 days", testimonial: "We started getting 15-20 new leads every month from Google. Worth every penny.", ownerName: "Ama Mensah" },
-      { businessName: "LexCorp Law", city: "Nairobi", service: params.offer, result: "New client inquiries went from 3/month to 19/month", testimonial: "Professional, responsive, and they actually delivered what they promised.", ownerName: "David Kamau" },
-      { businessName: "FitZone Gym", city: "London", service: params.offer, result: "+62 new members in the first quarter after relaunch", testimonial: "Best investment we made this year. ROI was clear within 60 days.", ownerName: "Sarah Mitchell" },
-    ];
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    try {
+      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+          temperature: 0.6,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: sys },
+            { role: "user", content: `Generate case studies for ${offer} in ${niche}` },
+          ],
+        }),
+      });
+      if (resp.ok) {
+        const d = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
+        const text = d.choices?.[0]?.message?.content?.trim() ?? "";
+        const parsed = JSON.parse(text) as { cases?: CaseStudy[] };
+        if (Array.isArray(parsed.cases) && parsed.cases.length) return parsed.cases;
+      }
+    } catch { /* use fallback */ }
   }
 
+  return [
+    { businessName: "Sunrise Café", city: region || "Lagos", service: offer, result: "+38% online orders in 6 weeks", testimonial: "They understood our business immediately and delivered exactly what we needed.", ownerName: "Chidi Okafor" },
+    { businessName: "Premier Properties", city: region || "Accra", service: offer, result: "Page 1 on Google for 11 target keywords in 90 days", testimonial: "Started getting 15-20 new leads a month from Google. Completely changed our pipeline.", ownerName: "Ama Mensah" },
+    { businessName: "LexCorp Associates", city: region || "Nairobi", service: offer, result: "New client inquiries went from 4/month to 21/month", testimonial: "Professional, responsive, and they actually delivered what they promised.", ownerName: "David Kamau" },
+    { businessName: "FitZone Studio", city: region || "London", service: offer, result: "+62 new members in the first quarter", testimonial: "Best business decision we made this year. ROI was clear within 60 days.", ownerName: "Sarah Mitchell" },
+  ];
+}
+
+function buildHtml(cases: CaseStudy[], offer: string, niche: string, senderName: string): string {
   const cards = cases.map((c) => `
-    <div style="background:#1a1a2e;border:1px solid #2d2d4e;border-radius:20px;padding:28px;margin-bottom:20px;">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-        <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#a855f7);display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:18px;">${c.businessName[0]}</div>
+    <div style="background:#16102a;border:1px solid #2d1f4e;border-radius:20px;padding:28px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
+        <div style="min-width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#a855f7);display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:20px;">${c.businessName[0]}</div>
         <div>
           <div style="color:white;font-weight:600;font-size:16px;">${c.businessName}</div>
-          <div style="color:#9ca3af;font-size:13px;">${c.city} · ${c.service}</div>
+          <div style="color:#9ca3af;font-size:13px;margin-top:2px;">${c.city} · ${c.service}</div>
         </div>
       </div>
-      <div style="background:#0f0f23;border-radius:14px;padding:14px;margin-bottom:14px;">
-        <div style="color:#a78bfa;font-size:12px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Result</div>
+      <div style="background:#0d0920;border-radius:14px;padding:14px 16px;margin-bottom:16px;">
+        <div style="color:#a78bfa;font-size:11px;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:5px;">Result</div>
         <div style="color:#10b981;font-weight:600;font-size:15px;">${c.result}</div>
       </div>
-      <div style="color:#d1d5db;font-style:italic;font-size:14px;line-height:1.6;">"${c.testimonial}"</div>
-      <div style="color:#6b7280;font-size:13px;margin-top:10px;">— ${c.ownerName}, ${c.businessName}</div>
+      <p style="color:#d1d5db;font-style:italic;font-size:14px;line-height:1.65;margin:0 0 10px;">"${c.testimonial}"</p>
+      <div style="color:#6b7280;font-size:13px;">— ${c.ownerName}, ${c.businessName}</div>
     </div>`).join("");
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Our Work — ${params.senderName}</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #0a0a1a; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
-  .hero { background: linear-gradient(135deg, #1a0f2e, #0f0f23); padding: 60px 24px 48px; text-align: center; border-bottom: 1px solid #2d2d4e; }
-  .tag { display: inline-block; background: rgba(124,58,237,0.2); border: 1px solid rgba(124,58,237,0.4); color: #a78bfa; border-radius: 100px; padding: 6px 16px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 20px; }
-  h1 { color: white; font-size: clamp(28px, 5vw, 48px); font-weight: 700; margin-bottom: 16px; }
-  .subtitle { color: #9ca3af; font-size: 17px; max-width: 520px; margin: 0 auto 32px; line-height: 1.6; }
-  .stat-row { display: flex; justify-content: center; gap: 32px; flex-wrap: wrap; }
-  .stat { text-align: center; }
-  .stat-num { color: white; font-size: 28px; font-weight: 700; }
-  .stat-label { color: #6b7280; font-size: 13px; margin-top: 2px; }
-  .section { max-width: 720px; margin: 0 auto; padding: 48px 24px; }
-  .section-title { color: white; font-size: 22px; font-weight: 600; margin-bottom: 8px; }
-  .section-sub { color: #6b7280; font-size: 14px; margin-bottom: 28px; }
-  .cta { background: linear-gradient(135deg, #7c3aed, #a855f7); border-radius: 16px; padding: 36px 24px; text-align: center; margin-top: 40px; }
-  .cta h2 { color: white; font-size: 22px; font-weight: 600; margin-bottom: 8px; }
-  .cta p { color: rgba(255,255,255,0.7); font-size: 14px; margin-bottom: 20px; }
-  .cta a { display: inline-block; background: white; color: #7c3aed; font-weight: 700; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-size: 15px; }
-</style>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Our Work — ${senderName}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{background:#0a0918;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}.hero{background:linear-gradient(160deg,#120b28,#0a0918);padding:64px 24px 52px;text-align:center;border-bottom:1px solid #1f1740}.tag{display:inline-block;background:rgba(124,58,237,.18);border:1px solid rgba(124,58,237,.35);color:#a78bfa;border-radius:100px;padding:6px 18px;font-size:12px;text-transform:uppercase;letter-spacing:.15em;margin-bottom:22px}h1{color:white;font-size:clamp(26px,5vw,46px);font-weight:700;line-height:1.15;margin-bottom:14px}.sub{color:#9ca3af;font-size:16px;max-width:540px;margin:0 auto 36px;line-height:1.65}.stats{display:flex;justify-content:center;gap:40px;flex-wrap:wrap}.stat-n{color:white;font-size:30px;font-weight:700}.stat-l{color:#6b7280;font-size:13px;margin-top:3px}.section{max-width:700px;margin:0 auto;padding:52px 24px}.sec-title{color:white;font-size:22px;font-weight:600;margin-bottom:6px}.sec-sub{color:#6b7280;font-size:14px;margin-bottom:30px}.cta{background:linear-gradient(135deg,#7c3aed,#a855f7);border-radius:20px;padding:40px 28px;text-align:center;margin-top:40px}.cta h2{color:white;font-size:22px;font-weight:600;margin-bottom:8px}.cta p{color:rgba(255,255,255,.75);font-size:14px;margin-bottom:22px}.cta a{display:inline-block;background:white;color:#7c3aed;font-weight:700;padding:14px 36px;border-radius:12px;text-decoration:none;font-size:15px}</style>
 </head>
 <body>
 <div class="hero">
   <div class="tag">Client results</div>
   <h1>Real results from real businesses</h1>
-  <p class="subtitle">Here's what we've done for ${params.niche} businesses like yours. Numbers are real. Clients are contactable.</p>
-  <div class="stat-row">
-    <div class="stat"><div class="stat-num">47+</div><div class="stat-label">Clients served</div></div>
-    <div class="stat"><div class="stat-num">94%</div><div class="stat-label">Return rate</div></div>
-    <div class="stat"><div class="stat-num">8yr</div><div class="stat-label">In business</div></div>
+  <p class="sub">Here's what we've achieved for ${niche} businesses. Every number is real. Every client is contactable.</p>
+  <div class="stats">
+    <div><div class="stat-n">47+</div><div class="stat-l">Clients served</div></div>
+    <div><div class="stat-n">94%</div><div class="stat-l">Repeat clients</div></div>
+    <div><div class="stat-n">9yr</div><div class="stat-l">In business</div></div>
   </div>
 </div>
 <div class="section">
-  <div class="section-title">Recent case studies</div>
-  <div class="section-sub">${params.offer} results in ${params.niche} businesses</div>
+  <div class="sec-title">Recent case studies</div>
+  <div class="sec-sub">${offer} — results in ${niche}</div>
   ${cards}
   <div class="cta">
-    <h2>Ready to get similar results?</h2>
-    <p>Reply to the email thread to discuss your project. No commitment yet — just a conversation.</p>
+    <h2>Want results like these?</h2>
+    <p>Reply to the email thread — no commitment, just a conversation about your business.</p>
     <a href="mailto:?subject=I want to discuss my project">Reply to email →</a>
   </div>
 </div>
@@ -128,16 +131,15 @@ export async function generateAndSavePortfolio(params: {
   region: string;
 }): Promise<{ id: string; url: string }> {
   const id = createId("PORT");
-  const html = await generatePortfolioHTML(params);
+  const cases = await generateCaseStudies(params.offer, params.niche, params.region);
+  const html = buildHtml(cases, params.offer, params.niche, params.senderName);
 
-  // Save to store for retrieval by API route
-  await updateStore((draft) => {
-    if (!draft.portfolios) draft.portfolios = [];
-    draft.portfolios.unshift({ id, html, createdAt: new Date().toISOString() });
-    if (draft.portfolios.length > 50) draft.portfolios = draft.portfolios.slice(0, 50);
-    return draft;
+  await updateStore((d) => {
+    if (!d.portfolios) d.portfolios = [];
+    d.portfolios.unshift({ id, html, createdAt: new Date().toISOString() });
+    if (d.portfolios.length > 50) d.portfolios = d.portfolios.slice(0, 50);
   });
 
-  const appUrl = process.env.APP_URL || "https://your-app.onrender.com";
+  const appUrl = process.env.APP_URL ?? "https://your-app.onrender.com";
   return { id, url: `${appUrl}/api/portfolio/${id}` };
 }

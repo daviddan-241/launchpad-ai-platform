@@ -2,53 +2,40 @@ import { logActivityEvent } from "@/lib/activity";
 import { createId, readStore, updateStore, type PaymentRequest, type User } from "@/lib/store";
 import { getUserPreference } from "@/lib/preferences";
 
-async function createFlutterwaveLink(payment: PaymentRequest) {
+// ─── Internal ────────────────────────────────────────────────────────────────
+
+async function createFlutterwaveLink(payment: PaymentRequest): Promise<string> {
   const secret = process.env.FLUTTERWAVE_SECRET_KEY;
   const appUrl = process.env.APP_URL || "http://localhost:3000";
-  if (!secret) {
-    throw new Error("FLUTTERWAVE_SECRET_KEY is missing.");
-  }
+  if (!secret) throw new Error("FLUTTERWAVE_SECRET_KEY not configured.");
 
-  const response = await fetch("https://api.flutterwave.com/v3/payments", {
+  const resp = await fetch("https://api.flutterwave.com/v3/payments", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${secret}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       tx_ref: payment.id,
       amount: payment.amount,
       currency: payment.currency,
       redirect_url: `${appUrl}/payments`,
       payment_options: "card,banktransfer,ussd",
-      customer: {
-        email: payment.clientEmail,
-        name: payment.clientName,
-      },
-      customizations: {
-        title: "LeadForge Payment",
-        description: payment.description,
-      },
-      meta: {
-        paymentRequestId: payment.id,
-        paymentType: payment.paymentType,
-        installmentCount: payment.installmentCount || 1,
-      },
+      customer: { email: payment.clientEmail, name: payment.clientName },
+      customizations: { title: "LeadForge Payment", description: payment.description },
+      meta: { paymentRequestId: payment.id, paymentType: payment.paymentType, installmentCount: payment.installmentCount || 1 },
     }),
   });
 
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Flutterwave link creation failed (${response.status}): ${message}`);
+  if (!resp.ok) {
+    const msg = await resp.text();
+    throw new Error(`Flutterwave error (${resp.status}): ${msg}`);
   }
 
-  const payload = (await response.json()) as { data?: { link?: string }; meta?: { authorization?: { redirect?: string } } };
+  const payload = (await resp.json()) as { data?: { link?: string }; meta?: { authorization?: { redirect?: string } } };
   const link = payload.data?.link || payload.meta?.authorization?.redirect;
-  if (!link) {
-    throw new Error("Flutterwave did not return a payment link.");
-  }
+  if (!link) throw new Error("Flutterwave did not return a payment link.");
   return link;
 }
+
+// ─── Public functions ─────────────────────────────────────────────────────
 
 export async function createPaymentDraft(params: {
   user: User;
@@ -76,20 +63,16 @@ export async function createPaymentDraft(params: {
     signatureRequired: Boolean(params.signatureRequired),
     provider: "flutterwave",
     status: "awaiting_approval",
+    ownerApprovalRequired: true,
+    sourceLeadId: params.sourceLeadId,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    sourceLeadId: params.sourceLeadId,
-    ownerApprovalRequired: true,
   };
 
-  await updateStore((store) => {
-    store.paymentRequests.unshift(payment);
-    return store;
-  });
+  await updateStore((store) => { store.paymentRequests.unshift(payment); });
 
   await logActivityEvent({
-    userId: params.user.id,
-    type: "payment",
+    userId: params.user.id, type: "payment",
     title: `Created payment draft for ${params.clientName}`,
     detail: `${payment.currency} ${payment.amount} · ${payment.paymentType}`,
     status: "pending",
@@ -100,25 +83,24 @@ export async function createPaymentDraft(params: {
 
 export async function approvePaymentRequest(user: User, paymentId: string) {
   const store = await readStore();
-  const payment = store.paymentRequests.find((item) => item.id === paymentId && item.userId === user.id);
+  const payment = store.paymentRequests.find((p) => p.id === paymentId && p.userId === user.id);
   if (!payment) throw new Error("Payment request not found.");
 
   const link = await createFlutterwaveLink(payment);
+
   await updateStore((draft) => {
-    const target = draft.paymentRequests.find((item) => item.id === paymentId);
-    if (target) {
-      target.providerLink = link;
-      target.providerReference = paymentId;
-      target.status = "link_ready";
-      target.approvedAt = new Date().toISOString();
-      target.updatedAt = new Date().toISOString();
+    const t = draft.paymentRequests.find((p) => p.id === paymentId);
+    if (t) {
+      t.providerLink = link;
+      t.providerReference = paymentId;
+      t.status = "link_ready";
+      t.approvedAt = new Date().toISOString();
+      t.updatedAt = new Date().toISOString();
     }
-    return draft;
   });
 
   await logActivityEvent({
-    userId: user.id,
-    type: "payment",
+    userId: user.id, type: "payment",
     title: `Approved payment for ${payment.clientName}`,
     detail: `${payment.currency} ${payment.amount}`,
     status: "done",
@@ -129,21 +111,17 @@ export async function approvePaymentRequest(user: User, paymentId: string) {
 
 export async function declinePaymentRequest(user: User, paymentId: string) {
   await updateStore((draft) => {
-    const target = draft.paymentRequests.find((item) => item.id === paymentId && item.userId === user.id);
-    if (!target) {
-      throw new Error("Payment request not found.");
-    }
-    target.status = "declined";
-    target.declinedAt = new Date().toISOString();
-    target.updatedAt = new Date().toISOString();
-    return draft;
+    const t = draft.paymentRequests.find((p) => p.id === paymentId && p.userId === user.id);
+    if (!t) throw new Error("Payment request not found.");
+    t.status = "declined";
+    t.declinedAt = new Date().toISOString();
+    t.updatedAt = new Date().toISOString();
   });
 
   await logActivityEvent({
-    userId: user.id,
-    type: "payment",
+    userId: user.id, type: "payment",
     title: `Declined payment request ${paymentId}`,
-    detail: "Owner chose not to release the payment link.",
+    detail: "Owner declined the payment link.",
     status: "failed",
   });
 }
@@ -156,36 +134,32 @@ export async function processInactivePaymentDrafts() {
     const preference = await getUserPreference(user.id);
     if (!preference.autoPreparePaymentEnabled) continue;
     const lastSeen = user.lastSeenAt ? new Date(user.lastSeenAt).getTime() : now;
-    const inactiveForMinutes = (now - lastSeen) / 60000;
-    if (inactiveForMinutes < preference.autoPreparePaymentAfterMinutes) continue;
+    const inactiveMin = (now - lastSeen) / 60_000;
+    if (inactiveMin < preference.autoPreparePaymentAfterMinutes) continue;
 
     const pending = store.paymentRequests.find(
-      (item) => item.userId === user.id && item.status === "awaiting_approval" && !item.providerLink,
+      (p) => p.userId === user.id && p.status === "awaiting_approval" && !p.providerLink,
     );
     if (!pending) continue;
 
     try {
       await approvePaymentRequest(user, pending.id);
-    } catch {
-      // leave as awaiting approval if provider config is missing
-    }
+    } catch { /* leave as draft if Flutterwave not configured */ }
   }
 }
 
-
-// ─── Fully autonomous payment: create + generate link + email client immediately ───
+// ─── Autonomous: create payment + Flutterwave link immediately (no owner approval) ──
 
 export async function autoCreateAndSendPayment(params: {
   userId: string;
-  emailAccountId: string;
   clientName: string;
   clientEmail: string;
   description: string;
   amount: number;
   currency: string;
-  senderName: string;
 }): Promise<{ id: string; link: string }> {
   const preference = await getUserPreference(params.userId);
+
   const payment: PaymentRequest = {
     id: createId("PAY"),
     userId: params.userId,
@@ -203,26 +177,22 @@ export async function autoCreateAndSendPayment(params: {
     updatedAt: new Date().toISOString(),
   };
 
-  let link = "";
+  let link: string;
   try {
     link = await createFlutterwaveLink(payment);
     payment.providerLink = link;
     payment.approvedAt = new Date().toISOString();
   } catch {
-    // No Flutterwave key — send a payment-pending email anyway
+    // Flutterwave not configured — use a fallback URL so the conversation still flows
     link = `${process.env.APP_URL ?? "https://your-app.onrender.com"}/payments`;
     payment.status = "draft";
-    payment.lastError = "Flutterwave key not configured";
+    payment.lastError = "Flutterwave key not configured — add FLUTTERWAVE_SECRET_KEY in Render env vars";
   }
 
-  await updateStore((store) => {
-    store.paymentRequests.unshift(payment);
-    return store;
-  });
+  await updateStore((store) => { store.paymentRequests.unshift(payment); });
 
   await logActivityEvent({
-    userId: params.userId,
-    type: "payment",
+    userId: params.userId, type: "payment",
     title: `Auto-payment created for ${params.clientName}`,
     detail: `${params.currency} ${params.amount} — ${params.description}`,
     status: "done",

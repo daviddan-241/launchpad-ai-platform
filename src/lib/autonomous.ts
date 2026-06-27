@@ -6,267 +6,282 @@ import { generateAndSavePortfolio } from "@/lib/portfolio-generator";
 import { notifyInterestedReply, notifyPaymentLinkSent } from "@/lib/notifications";
 import { createId, readStore, updateStore, type AutonomousCampaign, type AutoCampaignStep } from "@/lib/store";
 
-// ─── AI Core ────────────────────────────────────────────────────────────────
+// ─── AI Core — Gemini primary, Groq fallback ─────────────────────────────────
 
-async function callGemini(systemPrompt: string, userPrompt: string, json = false): Promise<string> {
-  const key = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-  if (!key) return "";
-  try {
-    const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: { temperature: 0.65, ...(json ? { responseMimeType: "application/json" } : {}) },
-        }),
-      },
-    );
-    if (resp.ok) {
-      const d = (await resp.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-      return d.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
-    }
-  } catch { /* fallback */ }
+async function callAI(system: string, user: string, json = false): Promise<string> {
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+
+  if (geminiKey) {
+    try {
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: system }] },
+            contents: [{ role: "user", parts: [{ text: user }] }],
+            generationConfig: { temperature: 0.65, ...(json ? { responseMimeType: "application/json" } : {}) },
+          }),
+        },
+      );
+      if (resp.ok) {
+        const d = (await resp.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+        const t = d.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+        if (t) return t;
+      }
+    } catch { /* fall through to Groq */ }
+  }
 
   const groqKey = process.env.GROQ_API_KEY;
-  const groqModel = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+  const groqModel = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
   if (groqKey) {
     try {
       const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: groqModel, temperature: 0.6,
-          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+          model: groqModel,
+          temperature: 0.6,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+          ...(json ? { response_format: { type: "json_object" } } : {}),
         }),
       });
       if (resp.ok) {
         const d = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
-        return d.choices?.[0]?.message?.content?.trim() ?? "";
+        const t = d.choices?.[0]?.message?.content?.trim() ?? "";
+        if (t) return t;
       }
-    } catch { /* skip */ }
+    } catch { /* no AI available */ }
   }
+
   return "";
 }
 
-// ─── Persona System ──────────────────────────────────────────────────────────
-// The AI consultant persona — sounds like a real person, not a bot
+// ─── Persona ───────────────────────────────────────────────────────────────
 
-function buildPersona(senderName: string, offer: string): string {
-  const firstName = senderName.split(" ")[0];
-  return `You are ${firstName}, a digital growth consultant with 9 years of experience helping small and medium businesses grow online. You specialise in ${offer}.
+function persona(senderName: string, offer: string): string {
+  const first = senderName.split(" ")[0];
+  return `You are ${first}, a growth consultant with 9 years helping small businesses get more clients online. You specialise in ${offer}.
 
-PERSONALITY RULES — follow these exactly:
-- Write like a real human. Short sentences. Natural. Never formal.
-- Max 3-4 sentences per message. Often just 1-2 sentences.
-- Use contractions (don't, I've, it's, you're, we'll).
-- Never say "I hope this finds you well", "I wanted to reach out", "as an AI", "as a language model".
-- Never use bullet points or headers in emails. Just short paragraphs.
-- Be warm and curious. Ask one question at a time.
-- When giving price, be casual: "It's usually around $X depending on scope" not "The investment is..."
-- If they haven't asked for price, don't mention it.
-- Sound like someone who's worked with dozens of similar businesses. Reference that naturally when relevant.
-- If they ask if you're real, say yes. You're a person, not a bot.
-- Never be pushy. If they need time, give them time.
-- Only offer to send a payment link if they explicitly say they're ready, want to go ahead, or ask how to pay.`;
+STRICT WRITING RULES — never break these:
+- Write like a real human texting a colleague. Short. Natural.
+- Max 3-4 sentences per message. Often just 1-2.
+- Use contractions: don't, it's, I've, we'll, you're.
+- NEVER say "I hope this email finds you well", "I wanted to reach out", "as per", "I am writing to".
+- Never use bullet points or headers in emails.
+- Be warm, curious, a little direct. One question per message.
+- Mention price casually only if they ask. Never push for it.
+- If they ask for past work/portfolio/examples — share the link naturally like a friend would.
+- Only offer payment link if they explicitly say "yes", "let's do it", "send me the link", "how do I pay", "I'm in".
+- If they ask if you're a bot: say no, you're a real person.
+- Never be desperate or pushy.`;
 }
 
-// ─── Message classification ───────────────────────────────────────────────
+// ─── Intent classifier ─────────────────────────────────────────────────────
 
-type MessageIntent =
-  | "interested"       // generally positive, wants to learn more
-  | "asking_price"     // asks about cost/pricing
-  | "ready_to_pay"     // "let's do it", "send the link", "how do I pay", "I'm in"
-  | "wants_portfolio"  // "do you have examples", "can I see your work", "past clients"
-  | "needs_more_info"  // has specific questions about the offer
-  | "asking_timeline"  // "how long does it take"
-  | "asking_process"   // "how does it work", "what's the process"
-  | "objection"        // "not sure", "we tried this before", "too expensive", "already have someone"
-  | "not_interested"   // "no thanks", "not for us", "unsubscribe", "remove me"
-  | "neutral"          // unclear, generic reply
-  | "other";
+type Intent =
+  | "interested"
+  | "asking_price"
+  | "ready_to_pay"
+  | "wants_portfolio"
+  | "asking_timeline"
+  | "asking_process"
+  | "objection"
+  | "not_interested"
+  | "neutral";
 
-async function classifyIntent(replyText: string): Promise<MessageIntent> {
-  const system = `Classify this email reply into EXACTLY ONE of these intents (return only the word):
-interested | asking_price | ready_to_pay | wants_portfolio | needs_more_info | asking_timeline | asking_process | objection | not_interested | neutral | other
+async function classifyIntent(text: string): Promise<Intent> {
+  const sys = `Classify this email reply. Return ONLY one word from this list:
+interested | asking_price | ready_to_pay | wants_portfolio | asking_timeline | asking_process | objection | not_interested | neutral
 
-ready_to_pay = they explicitly say yes/let's go/send the link/how do I pay.
-not_interested = clear rejection, unsubscribe, stop emailing.
-objection = doubt, previous bad experience, cost concern.`;
-  const text = await callGemini(system, `Email reply: "${replyText.slice(0, 600)}"`, false);
-  const intents: MessageIntent[] = ["interested","asking_price","ready_to_pay","wants_portfolio","needs_more_info","asking_timeline","asking_process","objection","not_interested","neutral","other"];
-  const found = intents.find((i) => text.toLowerCase().includes(i));
-  return found ?? "neutral";
+Definitions:
+- ready_to_pay: says yes/let's go/send the link/how do I pay/I'm ready/I'm in
+- not_interested: clear no/unsubscribe/stop/remove me/not for us
+- objection: doubt/too expensive/tried this before/already have someone/not sure
+- wants_portfolio: do you have examples/show me your work/past clients/proof/references
+- asking_price: how much/what's the cost/pricing/rates/fee
+- asking_timeline: how long/when/timeline/turnaround
+- asking_process: how does it work/what's the process/what do you do
+- interested: positive reply, wants to learn more, general yes/sounds good
+- neutral: unclear/generic reply`;
+
+  const raw = await callAI(sys, `Reply: "${text.slice(0, 600)}"`, false);
+  const intents: Intent[] = ["ready_to_pay", "not_interested", "wants_portfolio", "asking_price", "asking_timeline", "asking_process", "objection", "interested", "neutral"];
+  const lower = raw.toLowerCase().trim();
+  return intents.find((i) => lower.startsWith(i) || lower.includes(i)) ?? "neutral";
 }
 
-// ─── Response generators ──────────────────────────────────────────────────
+// ─── Email generators ──────────────────────────────────────────────────────
 
-async function genOutreachEmail(params: {
-  leadName: string; company: string; niche: string; offer: string;
-  senderName: string; hook: string; region: string;
-}): Promise<{ subject: string; body: string }> {
-  const persona = buildPersona(params.senderName, params.offer);
-  const system = `${persona}
+type EmailDraft = { subject: string; body: string };
 
-Write a COLD OUTREACH email. Rules:
-- Subject line: max 6 words, lowercase, conversational (not salesy)
-- Body: 2-3 short sentences. Just open a conversation. Don't pitch hard.
-- End with ONE casual question.
-- DO NOT mention price.
-- DO NOT say "I'm reaching out because..."
-- Use the hook naturally if it fits.
-- Return JSON: {subject, body}`;
+function makeHtml(text: string): string {
+  return text.split("\n").map((l) => l.trim() ? `<p>${l}</p>` : "").join("");
+}
 
-  const prompt = `Write cold email to ${params.leadName}, owner/manager at ${params.company} (${params.niche} business in ${params.region || "their city"}).
-Their likely issue: ${params.hook}.
-Your offer (don't push it yet): ${params.offer}.
-Sender: ${params.senderName}.`;
+async function genOutreach(p: { leadName: string; company: string; niche: string; offer: string; hook: string; senderName: string }): Promise<EmailDraft> {
+  const sys = `${persona(p.senderName, p.offer)}
 
-  const text = await callGemini(system, prompt, true);
+Write a cold outreach email. Rules:
+- Subject: max 6 words, lowercase, conversational (no exclamation, no "FREE", no "Quick question about [company]")
+- Body: 2-3 SHORT sentences. Open conversation — don't pitch yet.
+- End with exactly ONE casual question.
+- Do NOT mention price.
+- Return valid JSON: {"subject": "...", "body": "..."}`;
+
+  const raw = await callAI(sys, `Write cold email to ${p.leadName} at ${p.company} (${p.niche}). Their likely pain: ${p.hook}. Sender: ${p.senderName}.`, true);
   try {
-    const p = JSON.parse(text.replace(/```json|```/g, "").trim()) as { subject?: string; body?: string };
-    if (p.subject && p.body) return { subject: p.subject, body: p.body };
+    const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()) as Partial<EmailDraft>;
+    if (parsed.subject && parsed.body) return parsed as EmailDraft;
   } catch { /* fallback */ }
   return {
-    subject: `quick question about ${params.company}`,
-    body: `Hi ${params.leadName.split(" ")[0]},\n\nI work with ${params.niche} businesses on ${params.offer} and noticed ${params.company} — thought it might be relevant.\n\nIs this something you're currently looking to improve?\n\n${params.senderName}`,
+    subject: `question about ${p.company}`,
+    body: `Hi ${p.leadName.split(" ")[0]},\n\nI help ${p.niche} businesses with ${p.offer} and came across ${p.company} — thought it might be worth a quick chat.\n\nIs this something on your radar at all?\n\n${p.senderName}`,
   };
 }
 
-async function genConversationReply(params: {
-  leadName: string; company: string; niche: string; offer: string;
-  senderName: string; price: number; currency: string;
-  conversationHistory: string; latestReply: string; intent: MessageIntent;
-  portfolioUrl?: string;
-}): Promise<{ subject: string; body: string }> {
-  const persona = buildPersona(params.senderName, params.offer);
-  const system = `${persona}
+async function genConversationReply(p: {
+  leadName: string; company: string; niche: string; offer: string; senderName: string;
+  price: number; currency: string; history: string; latestReply: string;
+  intent: Intent; portfolioUrl?: string;
+}): Promise<EmailDraft> {
+  const portfolioNote = p.portfolioUrl
+    ? `Portfolio/examples page to share if they asked: ${p.portfolioUrl}`
+    : "";
 
-You're replying to an ongoing email conversation. Rules:
-- Keep it SHORT. 2-4 sentences max.
-- Match their energy. If they're brief, be brief.
-- Never sound like a sales robot.
-- Don't repeat yourself from earlier messages.
-- If intent is "asking_price": give a casual price range. Don't list features.
-- If intent is "wants_portfolio": share the portfolio link naturally.
-- If intent is "asking_timeline": give a real estimate casually.
-- If intent is "asking_process": explain in 2 sentences, naturally.
-- If intent is "objection": acknowledge it, don't argue. Ask what went wrong before or what their concern is.
-- If intent is "interested": continue the conversation, ask about their specific situation.
-- NEVER offer to send a payment link unless they ask how to pay or say they're ready.
-- Return JSON: {subject, body}`;
+  const sys = `${persona(p.senderName, p.offer)}
 
-  const prompt = `Conversation so far:
-${params.conversationHistory}
+You're replying to an email thread. Context:
+- Their intent: ${p.intent}
+- If asking_price: give a casual range. Don't recite features.
+- If wants_portfolio: share the portfolio link like "here's some of our recent work: [link]"
+- If asking_timeline: give a realistic estimate casually.
+- If asking_process: 2 sentences, plain language.
+- If objection: acknowledge it, ask what happened or what's the concern. Don't argue.
+- If interested/neutral: ask one question about their specific situation.
+${portfolioNote}
 
-Their latest reply: "${params.latestReply}"
-Intent detected: ${params.intent}
-${params.portfolioUrl ? `Portfolio URL to share if relevant: ${params.portfolioUrl}` : ""}
+NEVER send or mention payment links unless intent is ready_to_pay.
+Return valid JSON: {"subject": "...", "body": "..."}`;
 
-Write a natural, human reply from ${params.senderName}.`;
-
-  const text = await callGemini(system, prompt, true);
+  const raw = await callAI(sys, `Conversation so far:\n${p.history}\n\nLatest reply from ${p.leadName}: "${p.latestReply}"\n\nWrite your next reply as ${p.senderName}.`, true);
   try {
-    const p = JSON.parse(text.replace(/```json|```/g, "").trim()) as { subject?: string; body?: string };
-    if (p.subject && p.body) return { subject: p.subject, body: p.body };
+    const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()) as Partial<EmailDraft>;
+    if (parsed.subject && parsed.body) return parsed as EmailDraft;
+  } catch { /* fallback */ }
+  const fallbackBody = p.intent === "asking_price"
+    ? `Thanks for asking — it's usually around ${p.currency} ${p.price} depending on the scope. Happy to give you a more exact number once I know a bit more about what you need.\n\nWhat's your current situation with ${p.offer.split(" ")[0]}?\n\n${p.senderName}`
+    : `Appreciate the reply! Tell me a bit more about ${p.company} — what does your current setup look like for ${p.offer.split(" ")[0]}?\n\n${p.senderName}`;
+  return { subject: `Re: ${p.company}`, body: fallbackBody };
+}
+
+async function genFollowUp(p: { leadName: string; company: string; offer: string; senderName: string; days: number }): Promise<EmailDraft> {
+  const sys = `${persona(p.senderName, p.offer)}
+
+Write a short follow-up email to someone who didn't reply. Rules:
+- Max 2 sentences + one casual question.
+- Sound human, not like an automated drip.
+- Don't be needy or apologetic.
+Return valid JSON: {"subject": "...", "body": "..."}`;
+
+  const raw = await callAI(sys, `Follow up with ${p.leadName} at ${p.company}. It's been ${p.days} days about ${p.offer}. Sender: ${p.senderName}.`, true);
+  try {
+    const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()) as Partial<EmailDraft>;
+    if (parsed.subject && parsed.body) return parsed as EmailDraft;
   } catch { /* fallback */ }
   return {
-    subject: `Re: ${params.company}`,
-    body: `Thanks for getting back to me. ${params.intent === "asking_price" ? `It's usually around ${params.currency} ${params.price} depending on your specific needs.` : "Happy to tell you more about how it works."}\n\nWhat's your current situation with ${params.offer.split(" ")[0]}?\n\n${params.senderName}`,
+    subject: "still relevant?",
+    body: `Hey ${p.leadName.split(" ")[0]}, just bumping this — is ${p.offer} still worth exploring for ${p.company}?\n\n${p.senderName}`,
   };
 }
 
-async function genPaymentReadyReply(params: {
-  leadName: string; company: string; offer: string;
-  senderName: string; price: number; currency: string; paymentLink: string;
-}): Promise<{ subject: string; body: string }> {
-  const firstName = params.leadName.split(" ")[0];
-  const body = `${firstName}, great — glad we're on the same page.
-
-Here's the payment link to get started: ${params.paymentLink}
-
-Once that's done I'll kick things off within 24 hours. Let me know if you have any questions before then.
-
-${params.senderName}`;
-  return { subject: `Re: ${params.offer} — payment link`, body };
-}
-
-async function genFollowUpEmail(params: {
-  leadName: string; company: string; offer: string; senderName: string;
-  conversationHistory: string; daysSinceLastContact: number;
-}): Promise<{ subject: string; body: string }> {
-  const persona = buildPersona(params.senderName, params.offer);
-  const system = `${persona}
-
-Write a short follow-up email to someone who hasn't replied. Rules:
-- Max 2 sentences + question.
-- Not needy. Just checking in.
-- Sound like a real person, not a drip campaign.
-- Reference something specific if possible.
-- Return JSON: {subject, body}`;
-
-  const prompt = `Follow up to ${params.leadName} at ${params.company}. It's been ${params.daysSinceLastContact} days since last contact about ${params.offer}. Previous messages: ${params.conversationHistory.slice(0, 300)}.`;
-  const text = await callGemini(system, prompt, true);
-  try {
-    const p = JSON.parse(text.replace(/```json|```/g, "").trim()) as { subject?: string; body?: string };
-    if (p.subject && p.body) return { subject: p.subject, body: p.body };
-  } catch { /* fallback */ }
+function genPaymentReply(p: { leadName: string; offer: string; senderName: string; price: number; currency: string; paymentLink: string }): EmailDraft {
+  const first = p.leadName.split(" ")[0];
   return {
-    subject: `still relevant?`,
-    body: `Hey ${params.leadName.split(" ")[0]}, just circling back on this — is ${params.offer} still something worth exploring for ${params.company}?\n\n${params.senderName}`,
+    subject: `Re: ${p.offer} — payment link`,
+    body: `${first}, great — glad we're on the same page.\n\nHere's the payment link to get started: ${p.paymentLink}\n\nOnce that's done I'll kick things off within 24 hours. Let me know if you have any questions.\n\n${p.senderName}`,
   };
 }
 
-// ─── Human-like delay system ─────────────────────────────────────────────
+// ─── Human-like response delay ────────────────────────────────────────────
 
-function humanDelay(): number {
-  // 3-18 minutes in ms — randomised to feel natural
-  const minutes = 3 + Math.random() * 15;
-  return Math.floor(minutes * 60 * 1000);
+function nextResponseAt(): string {
+  const minMs = 3 * 60 * 1000;
+  const maxMs = 18 * 60 * 1000;
+  return new Date(Date.now() + minMs + Math.random() * (maxMs - minMs)).toISOString();
 }
 
-function shouldRespondNow(step: AutoCampaignStep): boolean {
+function isReadyToRespond(step: AutoCampaignStep): boolean {
   if (!step.nextResponseAt) return true;
   return Date.now() >= new Date(step.nextResponseAt).getTime();
 }
 
-function setNextResponseTime(step: AutoCampaignStep): void {
-  step.nextResponseAt = new Date(Date.now() + humanDelay()).toISOString();
-}
-
-// ─── Lead generation ─────────────────────────────────────────────────────
+// ─── Lead generation ──────────────────────────────────────────────────────
 
 type RawLead = { name: string; email: string; company: string; industry: string; region: string };
 
 async function generateLeads(niche: string, count: number, region?: string): Promise<RawLead[]> {
-  const system = `You are a B2B lead intelligence engine. Generate realistic business lead profiles.
-Return ONLY a valid JSON array. No markdown.
-Each object: name, email, company, industry, region.
-Make emails realistic (firstname.lastname@company.com or info@company.com).
-Generate exactly ${count} leads.`;
+  const regionText = region ? ` in ${region}` : "";
+  const sys = `You generate realistic B2B lead profiles. Return ONLY a valid JSON array. No markdown.
+Each object must have: name, email, company, industry, region.
+Email format: firstname.lastname@company.com or info@company.com.
+Generate exactly ${count} leads for the niche "${niche}"${regionText}.`;
 
-  const regionClause = region ? ` in ${region}` : "";
-  const text = await callGemini(system, `Generate ${count} B2B leads for this niche: "${niche}"${regionClause}.`, true);
-  try {
-    const arr = JSON.parse(text.replace(/```json|```/g, "").trim()) as RawLead[];
-    if (Array.isArray(arr)) return arr.slice(0, count);
-  } catch { /* fallback */ }
+  // Groq doesn't support json_object for array root — wrap it
+  const groqSys = sys + " Wrap the array in a JSON object: {\"leads\": [...]}";
+
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    const raw = await callAI(sys, `Generate ${count} leads for "${niche}"${regionText}.`, true);
+    try {
+      const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+      const arr: RawLead[] = Array.isArray(parsed) ? parsed : (parsed as { leads?: RawLead[] }).leads ?? [];
+      if (arr.length) return arr.slice(0, count);
+    } catch { /* try groq */ }
+  }
+
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    try {
+      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+          temperature: 0.6,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: groqSys },
+            { role: "user", content: `Generate ${count} leads for "${niche}"${regionText}.` },
+          ],
+        }),
+      });
+      if (resp.ok) {
+        const d = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
+        const text = d.choices?.[0]?.message?.content?.trim() ?? "";
+        const parsed = JSON.parse(text) as { leads?: RawLead[] };
+        if (Array.isArray(parsed.leads) && parsed.leads.length) return parsed.leads.slice(0, count);
+      }
+    } catch { /* no leads */ }
+  }
+
   return [];
 }
 
-// ─── Main campaign processor ─────────────────────────────────────────────
+// ─── Campaign processor ───────────────────────────────────────────────────
 
 async function processCampaign(campaign: AutonomousCampaign): Promise<void> {
   const store = await readStore();
   const account = store.emailAccounts.find((a) => a.id === campaign.emailAccountId && a.userId === campaign.userId);
   if (!account) return;
-
   const senderName = store.users.find((u) => u.id === campaign.userId)?.name ?? "Alex";
 
-  // Phase 1: Generate leads if none yet
+  // ── Phase 1: Generate leads ──
   if (campaign.steps.length === 0) {
     const rawLeads = await generateLeads(campaign.niche, campaign.targetCount, campaign.region);
     if (!rawLeads.length) return;
@@ -285,26 +300,31 @@ async function processCampaign(campaign: AutonomousCampaign): Promise<void> {
     await updateStore((d) => {
       const c = d.autonomousCampaigns.find((x) => x.id === campaign.id);
       if (c) { c.steps = steps; c.updatedAt = new Date().toISOString(); }
-      return d;
     });
     campaign = (await readStore()).autonomousCampaigns.find((x) => x.id === campaign.id)!;
+    if (!campaign) return;
   }
 
-  // Phase 2: Send initial outreach — batch 5 per run
-  const pendingSteps = campaign.steps.filter((s) => s.conversationState === "pending").slice(0, 5);
-  for (const step of pendingSteps) {
+  // ── Phase 2: Send initial outreach (batch 5 per run) ──
+  const pending = campaign.steps.filter((s) => s.conversationState === "pending").slice(0, 5);
+  for (const step of pending) {
     try {
-      const { topNeed } = await detectBusinessNeeds({ company: step.company, industry: campaign.niche, niche: campaign.niche, region: campaign.region ?? "" });
-      const { subject, body } = await genOutreachEmail({
+      const { topNeed } = await detectBusinessNeeds({
+        company: step.company, industry: campaign.niche, niche: campaign.niche, region: campaign.region ?? "",
+      });
+      const hook = topNeed.hook
+        .replace("[city]", campaign.region ?? "your city")
+        .replace("[food type]", campaign.niche)
+        .replace("[food]", campaign.niche)
+        .replace("[law type]", campaign.niche)
+        .replace("[area]", campaign.region ?? "your area");
+
+      const { subject, body } = await genOutreach({
         leadName: step.leadName, company: step.company, niche: campaign.niche,
-        offer: campaign.offer, senderName, hook: topNeed.hook.replace("[city]", campaign.region ?? "your city").replace("[food type]", campaign.niche).replace("[food]", campaign.niche).replace("[law type]", campaign.niche).replace("[area]", campaign.region ?? "your area"),
-        region: campaign.region ?? "",
+        offer: campaign.offer, hook, senderName,
       });
 
-      await sendEmailWithAccount({
-        accountId: account.id, to: step.leadEmail, subject,
-        html: body.split("\n").map((l) => `<p>${l}</p>`).join(""), text: body,
-      });
+      await sendEmailWithAccount({ accountId: account.id, to: step.leadEmail, subject, html: makeHtml(body), text: body });
 
       await updateStore((d) => {
         const c = d.autonomousCampaigns.find((x) => x.id === campaign.id);
@@ -316,28 +336,21 @@ async function processCampaign(campaign: AutonomousCampaign): Promise<void> {
           s.lastActionAt = new Date().toISOString();
         }
         if (c) { c.totalEmailed = (c.totalEmailed || 0) + 1; c.updatedAt = new Date().toISOString(); }
-        return d;
       });
-    } catch { /* skip */ }
+    } catch { /* skip failed send */ }
   }
 
-  // Phase 3: Follow up on cold leads (no reply after 3 days, max 1 follow-up)
+  // ── Phase 3: Follow up on cold leads (no reply after 3 days, one follow-up each) ──
   const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
-  const coldSteps = campaign.steps.filter(
+  const cold = campaign.steps.filter(
     (s) => s.conversationState === "emailed" && !s.followedUp && new Date(s.lastActionAt).getTime() < threeDaysAgo,
   ).slice(0, 3);
 
-  for (const step of coldSteps) {
+  for (const step of cold) {
     try {
-      const daysSince = Math.round((Date.now() - new Date(step.lastActionAt).getTime()) / (24 * 60 * 60 * 1000));
-      const history = (step.conversationHistory ?? []).map((m) => `${m.role === "assistant" ? senderName : step.leadName}: ${m.content}`).join("\n\n");
-      const { subject, body } = await genFollowUpEmail({ leadName: step.leadName, company: step.company, offer: campaign.offer, senderName, conversationHistory: history, daysSinceLastContact: daysSince });
-
-      await sendEmailWithAccount({
-        accountId: account.id, to: step.leadEmail, subject,
-        html: body.split("\n").map((l) => `<p>${l}</p>`).join(""), text: body,
-      });
-
+      const days = Math.round((Date.now() - new Date(step.lastActionAt).getTime()) / 86_400_000);
+      const { subject, body } = await genFollowUp({ leadName: step.leadName, company: step.company, offer: campaign.offer, senderName, days });
+      await sendEmailWithAccount({ accountId: account.id, to: step.leadEmail, subject, html: makeHtml(body), text: body });
       await updateStore((d) => {
         const c = d.autonomousCampaigns.find((x) => x.id === campaign.id);
         const s = c?.steps.find((x) => x.leadId === step.leadId);
@@ -347,138 +360,131 @@ async function processCampaign(campaign: AutonomousCampaign): Promise<void> {
           s.conversationHistory = [...(s.conversationHistory ?? []), { role: "assistant", content: body, sentAt: new Date().toISOString() }];
           s.lastActionAt = new Date().toISOString();
         }
-        return d;
       });
     } catch { /* skip */ }
   }
 
-  // Phase 4: Process inbox replies and have real conversations
+  // ── Phase 4: Handle inbox replies and have real conversations ──
   const freshStore = await readStore();
-  const freshCampaign = freshStore.autonomousCampaigns.find((x) => x.id === campaign.id)!;
-  const activeSteps = freshCampaign.steps.filter((s) =>
+  const fresh = freshStore.autonomousCampaigns.find((x) => x.id === campaign.id);
+  if (!fresh) return;
+
+  const activeSteps = fresh.steps.filter((s) =>
     ["emailed", "followed_up", "in_conversation", "offer_made"].includes(s.conversationState ?? ""),
   );
 
   const inboxMessages = freshStore.inbox.filter((msg) => {
-    const fromEmail = (msg.from ?? "").toLowerCase();
-    return activeSteps.some((l) =>
-      fromEmail.includes(l.leadEmail.toLowerCase().split("@")[0]) ||
-      l.leadEmail.toLowerCase() === fromEmail,
-    );
+    const from = (msg.from ?? "").toLowerCase();
+    return activeSteps.some((l) => {
+      const leadUser = l.leadEmail.toLowerCase().split("@")[0];
+      return from.includes(leadUser) || from === l.leadEmail.toLowerCase();
+    });
   });
 
   for (const msg of inboxMessages) {
-    const step = activeSteps.find((l) =>
-      (msg.from ?? "").toLowerCase().includes(l.leadEmail.toLowerCase().split("@")[0]) ||
-      l.leadEmail.toLowerCase() === (msg.from ?? "").toLowerCase(),
-    );
+    const step = activeSteps.find((l) => {
+      const from = (msg.from ?? "").toLowerCase();
+      const leadUser = l.leadEmail.toLowerCase().split("@")[0];
+      return from.includes(leadUser) || from === l.leadEmail.toLowerCase();
+    });
     if (!step) continue;
 
-    // Already handled this message?
-    const msgContent = msg.preview ?? msg.subject ?? "";
-    const alreadyHandled = (step.conversationHistory ?? []).some((h) => h.role === "user" && h.content.includes(msgContent.slice(0, 50)));
+    // Skip already-handled messages
+    const msgSnippet = (msg.preview ?? msg.subject ?? "").slice(0, 60);
+    const alreadyHandled = (step.conversationHistory ?? []).some(
+      (h) => h.role === "user" && h.content.slice(0, 60) === msgSnippet,
+    );
     if (alreadyHandled) continue;
 
-    // Wait for human-like delay before responding
-    if (!shouldRespondNow(step)) continue;
+    // Enforce human-like delay
+    if (!isReadyToRespond(step)) continue;
 
-    const intent = await classifyIntent(msgContent);
+    const replyText = msg.preview ?? msg.subject ?? "";
+    const intent = await classifyIntent(replyText);
 
+    // Handle unsubscribes
     if (intent === "not_interested") {
       await updateStore((d) => {
         const c = d.autonomousCampaigns.find((x) => x.id === campaign.id);
         const s = c?.steps.find((x) => x.leadId === step.leadId);
         if (s) { s.conversationState = "declined"; s.status = "declined"; s.lastActionAt = new Date().toISOString(); }
-        return d;
       });
       continue;
     }
 
-    // Notify owner if interested
+    // Notify owner of hot leads
     if (["interested", "asking_price", "ready_to_pay", "wants_portfolio"].includes(intent)) {
-      await notifyInterestedReply({ clientName: step.leadName, clientEmail: step.leadEmail, company: step.company, replyText: msgContent }).catch(() => undefined);
+      notifyInterestedReply({ clientName: step.leadName, clientEmail: step.leadEmail, company: step.company, replyText }).catch(() => undefined);
     }
 
-    let replyBody = "";
-    let replySubject = "";
+    const history = (step.conversationHistory ?? [])
+      .map((m) => `${m.role === "assistant" ? senderName : step.leadName}: ${m.content}`)
+      .join("\n\n");
+
+    let draft: EmailDraft;
+    let newState = "in_conversation";
 
     if (intent === "ready_to_pay") {
-      // Only now do we create and send the payment link
       try {
         const payment = await autoCreateAndSendPayment({
-          userId: campaign.userId, emailAccountId: account.id,
-          clientName: step.leadName, clientEmail: step.leadEmail,
-          description: campaign.offer, amount: campaign.price, currency: campaign.currency, senderName,
+          userId: campaign.userId,
+          clientName: step.leadName,
+          clientEmail: step.leadEmail,
+          description: campaign.offer,
+          amount: campaign.price,
+          currency: campaign.currency,
         });
-        const { subject, body } = await genPaymentReadyReply({ leadName: step.leadName, company: step.company, offer: campaign.offer, senderName, price: campaign.price, currency: campaign.currency, paymentLink: payment.link });
-        replySubject = subject;
-        replyBody = body;
+        draft = genPaymentReply({ leadName: step.leadName, offer: campaign.offer, senderName, price: campaign.price, currency: campaign.currency, paymentLink: payment.link });
+        newState = "payment_requested";
 
         await updateStore((d) => {
           const c = d.autonomousCampaigns.find((x) => x.id === campaign.id);
           const s = c?.steps.find((x) => x.leadId === step.leadId);
-          if (s) { s.conversationState = "payment_requested"; s.status = "payment_sent"; s.paymentId = payment.id; }
-          return d;
+          if (s) { s.paymentId = payment.id; s.status = "payment_sent"; }
         });
-        await notifyPaymentLinkSent({ clientName: step.leadName, clientEmail: step.leadEmail, amount: campaign.price, currency: campaign.currency }).catch(() => undefined);
-      } catch { /* skip */ }
+        notifyPaymentLinkSent({ clientName: step.leadName, clientEmail: step.leadEmail, amount: campaign.price, currency: campaign.currency }).catch(() => undefined);
+      } catch {
+        draft = await genConversationReply({ leadName: step.leadName, company: step.company, niche: campaign.niche, offer: campaign.offer, senderName, price: campaign.price, currency: campaign.currency, history, latestReply: replyText, intent: "asking_price" });
+      }
     } else if (intent === "wants_portfolio") {
-      // Generate demo portfolio and send link
       let portfolioUrl: string | undefined;
       try {
         const port = await generateAndSavePortfolio({ offer: campaign.offer, niche: campaign.niche, senderName, region: campaign.region ?? "" });
         portfolioUrl = port.url;
-      } catch { /* skip */ }
-
-      const history = (step.conversationHistory ?? []).map((m) => `${m.role === "assistant" ? senderName : step.leadName}: ${m.content}`).join("\n\n");
-      const { subject, body } = await genConversationReply({ leadName: step.leadName, company: step.company, niche: campaign.niche, offer: campaign.offer, senderName, price: campaign.price, currency: campaign.currency, conversationHistory: history, latestReply: msgContent, intent, portfolioUrl });
-      replySubject = subject;
-      replyBody = body;
+      } catch { /* send without link */ }
+      draft = await genConversationReply({ leadName: step.leadName, company: step.company, niche: campaign.niche, offer: campaign.offer, senderName, price: campaign.price, currency: campaign.currency, history, latestReply: replyText, intent, portfolioUrl });
+      newState = "offer_made";
     } else {
-      // Natural conversation reply
-      const history = (step.conversationHistory ?? []).map((m) => `${m.role === "assistant" ? senderName : step.leadName}: ${m.content}`).join("\n\n");
-      const { subject, body } = await genConversationReply({ leadName: step.leadName, company: step.company, niche: campaign.niche, offer: campaign.offer, senderName, price: campaign.price, currency: campaign.currency, conversationHistory: history, latestReply: msgContent, intent });
-      replySubject = subject;
-      replyBody = body;
+      draft = await genConversationReply({ leadName: step.leadName, company: step.company, niche: campaign.niche, offer: campaign.offer, senderName, price: campaign.price, currency: campaign.currency, history, latestReply: replyText, intent });
+      if (intent === "asking_price") newState = "offer_made";
     }
 
-    if (replyBody) {
-      try {
-        await sendEmailWithAccount({
-          accountId: account.id, to: step.leadEmail, subject: replySubject,
-          html: replyBody.split("\n").map((l) => `<p>${l}</p>`).join(""), text: replyBody,
-        });
+    try {
+      await sendEmailWithAccount({ accountId: account.id, to: step.leadEmail, subject: draft.subject, html: makeHtml(draft.body), text: draft.body });
 
-        await updateStore((d) => {
-          const c = d.autonomousCampaigns.find((x) => x.id === campaign.id);
-          const s = c?.steps.find((x) => x.leadId === step.leadId);
-          if (s) {
-            const prevState = s.conversationState;
-            if (!["payment_requested", "declined"].includes(s.conversationState ?? "")) {
-              s.conversationState = intent === "asking_price" || intent === "wants_portfolio" ? "offer_made" : "in_conversation";
-              s.status = "replied";
-            }
-            s.conversationHistory = [
-              ...(s.conversationHistory ?? []),
-              { role: "user", content: msgContent, sentAt: new Date().toISOString() },
-              { role: "assistant", content: replyBody, sentAt: new Date().toISOString() },
-            ];
-            s.lastActionAt = new Date().toISOString();
-            setNextResponseTime(s); // Set next human-like delay
-          }
-          if (c && !["payment_requested", "declined"].includes(freshCampaign.steps.find((x) => x.leadId === step.leadId)?.conversationState ?? "")) {
-            c.totalReplied = (c.totalReplied || 0) + 1;
-          }
-          return d;
-        });
+      await updateStore((d) => {
+        const c = d.autonomousCampaigns.find((x) => x.id === campaign.id);
+        const s = c?.steps.find((x) => x.leadId === step.leadId);
+        if (s && !["payment_requested", "declined"].includes(s.conversationState ?? "")) {
+          s.conversationState = newState;
+          s.status = newState === "payment_requested" ? "payment_sent" : "replied";
+          s.conversationHistory = [
+            ...(s.conversationHistory ?? []),
+            { role: "user", content: replyText, sentAt: new Date().toISOString() },
+            { role: "assistant", content: draft.body, sentAt: new Date().toISOString() },
+          ];
+          s.lastActionAt = new Date().toISOString();
+          s.nextResponseAt = nextResponseAt();
+        }
+        if (c) { c.totalReplied = (c.totalReplied || 0) + 1; c.updatedAt = new Date().toISOString(); }
+      });
 
-        await logActivityEvent({ userId: campaign.userId, type: "outreach", title: `Auto-reply to ${step.leadName} (${intent})`, detail: `${step.company} — ${replySubject}`, status: "done" });
-      } catch { /* skip */ }
-    }
+      await logActivityEvent({ userId: campaign.userId, type: "outreach", title: `Auto-reply to ${step.leadName} (${intent})`, detail: `${step.company} — ${draft.subject}`, status: "done" });
+    } catch { /* skip */ }
   }
 }
 
-// ─── Public API ──────────────────────────────────────────────────────────
+// ─── Public API ───────────────────────────────────────────────────────────
 
 export async function launchAutonomousCampaign(params: {
   userId: string; name: string; niche: string; offer: string;
@@ -508,17 +514,22 @@ export async function launchAutonomousCampaign(params: {
   await updateStore((d) => {
     if (!d.autonomousCampaigns) d.autonomousCampaigns = [];
     d.autonomousCampaigns.unshift(campaign);
-    return d;
   });
 
-  await logActivityEvent({ userId: params.userId, type: "campaign", title: `Autonomous campaign launched: ${params.name}`, detail: `${params.targetCount} ${params.niche} leads → ${params.offer} @ ${params.currency} ${params.price}`, status: "done" });
+  await logActivityEvent({
+    userId: params.userId, type: "campaign",
+    title: `Autonomous campaign launched: ${params.name}`,
+    detail: `${params.targetCount} ${params.niche} leads → ${params.offer} @ ${params.currency} ${params.price}`,
+    status: "done",
+  });
+
   return campaign;
 }
 
 export async function runAutonomousCampaigns(): Promise<void> {
   const store = await readStore();
   const running = (store.autonomousCampaigns ?? []).filter((c) => c.status === "running");
-  for (const campaign of running) {
-    await processCampaign(campaign).catch(() => undefined);
+  for (const c of running) {
+    await processCampaign(c).catch(() => undefined);
   }
 }
