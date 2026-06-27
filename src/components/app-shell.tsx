@@ -26,7 +26,7 @@ const navItems = [
   { href: "/settings", label: "Settings" },
 ];
 
-function Sidebar({ user, onNavigate }: { user: User; onNavigate?: () => void }) {
+function Sidebar({ user, pipelineValue = 0, onNavigate }: { user: User; pipelineValue?: number; onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col bg-[#140a1e] px-5 py-6">
       <div className="flex items-center justify-between gap-3">
@@ -81,14 +81,14 @@ export function AppShell({ children, user, pipelineValue = 0 }: { children: Reac
       <UserPresencePing />
       <div className="mx-auto grid min-h-screen max-w-[1600px] grid-cols-1 lg:grid-cols-[280px_1fr]">
         <aside className="hidden border-r border-white/10 lg:block">
-          <Sidebar user={user} />
+          <Sidebar user={user} pipelineValue={pipelineValue} />
         </aside>
 
         {mobileOpen ? (
           <div className="fixed inset-0 z-50 lg:hidden">
             <button className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} aria-label="Close navigation" />
             <aside className="relative z-10 h-full w-[86vw] max-w-[336px] border-r border-white/10 shadow-2xl shadow-black/40">
-              <Sidebar user={user} onNavigate={() => setMobileOpen(false)} />
+              <Sidebar user={user} pipelineValue={pipelineValue} onNavigate={() => setMobileOpen(false)} />
             </aside>
           </div>
         ) : null}

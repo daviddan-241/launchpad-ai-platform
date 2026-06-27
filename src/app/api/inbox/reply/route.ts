@@ -6,15 +6,62 @@ import { readStore, updateStore } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-function heuristicReply(message: string): string {
-  const lower = message.toLowerCase();
-  if (/timing|next month|later|busy/i.test(lower))
-    return "Totally fair. I'll keep this light for now and follow up when timing is better. In the meantime, I can send a short checklist your team can use so you already have the playbook when you're ready.";
-  if (/price|budget|cost/i.test(lower))
-    return "Happy to break down the value clearly. Since this build is free-first, I'd focus on the workflows that reduce manual prospecting, improve routing, and help your reps book more meetings without adding more tools.";
-  if (/salesforce|crm|hubspot/i.test(lower))
-    return "Yes — the best setup is to sync only the fields that matter, apply dedupe rules first, and push updates back to the CRM in a controlled way so reps always see fresh records instead of duplicates.";
-  return "Thanks for the note. Based on what you shared, I'd tailor the workflow around your current process, keep the rollout simple, and focus first on the fastest path to more qualified conversations. If helpful, I can outline the exact next steps for your team.";
+async function generateAIDraft(message: string): Promise<string> {
+  const system = [
+    "You are a senior B2B sales professional.",
+    "Generate a concise, helpful reply to an inbound prospect email.",
+    "Be warm, direct, and move the conversation forward.",
+    "Max 3 sentences. No fluff. No placeholder text.",
+    "Return ONLY the reply body — no subject line, no greeting, no signature.",
+  ].join(" ");
+
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  if (geminiKey) {
+    try {
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: system }] },
+            contents: [{ role: "user", parts: [{ text: `Message from prospect: "${message}"` }] }],
+            generationConfig: { temperature: 0.45, maxOutputTokens: 200 },
+          }),
+        },
+      );
+      if (resp.ok) {
+        const d = (await resp.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+        const text = d.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (text) return text;
+      }
+    } catch { /* fall through */ }
+  }
+
+  const groqKey = process.env.GROQ_API_KEY;
+  const groqModel = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+  if (groqKey) {
+    try {
+      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: [{ role: "system", content: system }, { role: "user", content: `Message from prospect: "${message}"` }],
+          temperature: 0.45,
+          max_tokens: 200,
+        }),
+      });
+      if (resp.ok) {
+        const d = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
+        const text = d.choices?.[0]?.message?.content?.trim();
+        if (text) return text;
+      }
+    } catch { /* no AI available */ }
+  }
+
+  return "Thanks for your message. I'd love to understand your situation better — would a quick call this week work for you?";
 }
 
 export async function POST(request: Request) {
@@ -27,7 +74,8 @@ export async function POST(request: Request) {
 
   // Draft generation mode — no messageId, no auth required
   if (!body.messageId) {
-    return NextResponse.json({ draft: heuristicReply(body.message?.trim() || "") });
+    const draft = await generateAIDraft(body.message?.trim() || "");
+    return NextResponse.json({ draft });
   }
 
   // Real send mode — auth required

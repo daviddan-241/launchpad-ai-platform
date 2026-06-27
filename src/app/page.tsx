@@ -1,8 +1,26 @@
 import Image from "next/image";
 import Link from "next/link";
-import { campaigns, leads, workflows } from "@/lib/demo-data";
 
-const topLead = leads[0];
+const HERO_LEAD = {
+  name: "Sarah Chen",
+  title: "VP of Sales",
+  company: "Vantage Cloud",
+  recentSignal: "Hiring 5 BDRs and posted about pipeline velocity challenges",
+  fitScore: 94,
+  intentScore: 91,
+};
+
+const HERO_CAMPAIGNS = [
+  { id: "1", status: "Running", name: "SaaS Outreach Sprint", channelMix: ["Email", "LinkedIn"] },
+  { id: "2", status: "Running", name: "Founder Pipeline", channelMix: ["Email", "Call"] },
+  { id: "3", status: "Draft", name: "RevOps Sequence", channelMix: ["Email"] },
+];
+
+const HERO_WORKFLOWS = [
+  { id: "1", name: "Inbound form enrichment + routing", successRate: 96 },
+  { id: "2", name: "No-reply rescue sequence", successRate: 71 },
+  { id: "3", name: "Reply to CRM stage sync", successRate: 88 },
+];
 
 export default function Home() {
   return (
@@ -79,17 +97,17 @@ export default function Home() {
               <div className="mt-5 rounded-3xl border border-white/10 bg-[#0b0610] p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-lg font-semibold">{topLead.name}</p>
-                    <p className="text-sm text-slate-400">{topLead.title} · {topLead.company}</p>
-                    <p className="mt-2 text-sm text-slate-300">{topLead.recentSignal}</p>
+                    <p className="text-lg font-semibold">{HERO_LEAD.name}</p>
+                    <p className="text-sm text-slate-400">{HERO_LEAD.title} · {HERO_LEAD.company}</p>
+                    <p className="mt-2 text-sm text-slate-300">{HERO_LEAD.recentSignal}</p>
                   </div>
                   <div className="grid gap-2 text-xs">
-                    <span className="rounded-full border border-white/10 px-3 py-1 text-center">Fit {topLead.fitScore}</span>
-                    <span className="rounded-full border border-white/10 px-3 py-1 text-center">Intent {topLead.intentScore}</span>
+                    <span className="rounded-full border border-white/10 px-3 py-1 text-center">Fit {HERO_LEAD.fitScore}</span>
+                    <span className="rounded-full border border-white/10 px-3 py-1 text-center">Intent {HERO_LEAD.intentScore}</span>
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  {campaigns.map((campaign) => (
+                  {HERO_CAMPAIGNS.map((campaign) => (
                     <div key={campaign.id} className="rounded-2xl border border-white/8 bg-white/5 p-3">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-400">{campaign.status}</p>
                       <p className="mt-2 text-sm font-semibold text-white">{campaign.name}</p>
@@ -185,7 +203,7 @@ export default function Home() {
               <div className="rounded-[28px] border border-white/10 bg-[#0b0610] p-5">
                 <p className="text-sm font-semibold text-white">Automation coverage</p>
                 <div className="mt-4 space-y-4">
-                  {workflows.map((workflow) => (
+                  {HERO_WORKFLOWS.map((workflow) => (
                     <div key={workflow.id}>
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-slate-200">{workflow.name}</span>

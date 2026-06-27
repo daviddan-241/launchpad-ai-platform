@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     if (lines.length < 2) return NextResponse.json({ error: "CSV must have a header row and at least one data row." }, { status: 400 });
 
     const headerLine = lines[0].toLowerCase();
-    const headers = headerLine.split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+    const headers = headerLine.split(",").map((h: string) => h.trim().replace(/^"|"$/g, ""));
 
     const idx = (name: string) => headers.indexOf(name);
 
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
 
     await updateStore((store) => {
       for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].match(/(?:"[^"]*(?:""[^"]*)*"|[^,]*)/g)?.map((c) => c.replace(/^"|"$/g, "").replace(/""/g, '"').trim()) ?? [];
+        const cols = lines[i].match(/(?:"[^"]*(?:""[^"]*)*"|[^,]*)/g)?.map((c: string) => c.replace(/^"|"$/g, "").replace(/""/g, '"').trim()) ?? [];
 
         const name = cols[idx("name")]?.trim();
         const email = cols[idx("email")]?.trim();
@@ -95,8 +95,8 @@ export async function POST(request: NextRequest) {
           intentScore: Number(cols[idx("intentscore")] || cols[idx("intent_score")] || 60),
           stage: "New" as const,
           nextStep: cols[idx("nextstep")] || cols[idx("next_step")] || "Review and enrich",
-          tags: (cols[idx("tags")] || "").split(";").map((t) => t.trim()).filter(Boolean),
-          painPoints: (cols[idx("painpoints")] || cols[idx("pain_points")] || "").split(";").map((t) => t.trim()).filter(Boolean),
+          tags: (cols[idx("tags")] || "").split(";").map((t: string) => t.trim()).filter(Boolean),
+          painPoints: (cols[idx("painpoints")] || cols[idx("pain_points")] || "").split(";").map((t: string) => t.trim()).filter(Boolean),
           recentSignal: cols[idx("recentsignal")] || cols[idx("recent_signal")] || `Imported ${new Date().toLocaleDateString()}`,
           lastTouched: "just now",
         };

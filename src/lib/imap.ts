@@ -301,15 +301,7 @@ async function generateAiReply(params: {
     } catch { /* fall through */ }
   }
 
-  // Heuristic fallback
-  const text = (params.subject + " " + params.body).toLowerCase();
-  if (/timing|next month|later|busy/i.test(text))
-    return "Totally fair — I'll keep this light. Happy to follow up when timing is better, and I can share a short resource in the meantime that might be useful.";
-  if (/price|cost|budget|how much/i.test(text))
-    return "Great question on pricing. The fastest way to give you the right number is a quick 15-min call — I can walk you through what's included and tailor it to your team size.";
-  if (/interest|yes|let's|book|call|sounds good|love/i.test(text))
-    return "Glad to hear it! Let me send over a few time slots so we can get something on the calendar. Looking forward to connecting.";
-  return "Thanks for reaching out. I'd love to tailor our next step to your specific situation — would a quick call this week work for you?";
+  return "Thanks for your message. I'd love to understand your situation better — would a quick call this week work for you?";
 }
 
 // ─── Sentiment ───────────────────────────────────────────────────────────────

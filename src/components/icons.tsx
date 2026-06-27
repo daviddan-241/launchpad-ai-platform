@@ -1,6 +1,8 @@
 // Custom SVG icon system — replaces all emoji usage in the UI
 // Each icon is a clean, minimal SVG that matches the LeadForge dark theme
 
+import type { ReactElement } from "react";
+
 type IconProps = { className?: string; size?: number };
 
 export function IconSend({ className = "h-4 w-4", size }: IconProps) {
@@ -173,7 +175,7 @@ export function IconDot({ className = "h-2 w-2", active = false }: { className?:
 }
 
 // Nav icons map used in app-shell
-export const NAV_ICONS: Record<string, (props: IconProps) => JSX.Element> = {
+export const NAV_ICONS: Record<string, (props: IconProps) => ReactElement> = {
   "/chat": IconChat,
   "/activity": IconActivity,
   "/projects": IconPortfolio,
