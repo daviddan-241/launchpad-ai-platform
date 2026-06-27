@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { NAV_ICONS, IconChat } from "@/components/icons";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { LogoutButton } from "@/components/logout-button";
@@ -54,10 +55,10 @@ function Sidebar({ user, onNavigate }: { user: User; onNavigate?: () => void }) 
             key={item.href}
             href={item.href}
             onClick={onNavigate}
-            className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm text-slate-300 transition hover:bg-white/8 hover:text-white"
+            className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-slate-300 transition hover:bg-white/8 hover:text-white"
           >
-            <span>{item.label}</span>
-            <span className="text-slate-500">→</span>
+            {(() => { const Icon = NAV_ICONS[item.href] ?? IconChat; return <Icon className="h-4 w-4 flex-shrink-0 text-slate-500" />; })()}
+            <span className="flex-1">{item.label}</span>
           </Link>
         ))}
       </nav>
