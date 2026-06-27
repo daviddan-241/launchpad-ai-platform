@@ -4,6 +4,7 @@ import { autoCreateAndSendPayment } from "@/lib/payments";
 import { detectBusinessNeeds } from "@/lib/business-detector";
 import { generateAndSavePortfolio } from "@/lib/portfolio-generator";
 import { notifyInterestedReply, notifyPaymentLinkSent } from "@/lib/notifications";
+import { scoreAndPersistLead } from "@/lib/lead-scorer";
 import { createId, readStore, updateStore, type AutonomousCampaign, type AutoCampaignStep } from "@/lib/store";
 
 // ─── AI Core — Gemini primary, Groq fallback ─────────────────────────────────
@@ -480,6 +481,17 @@ async function processCampaign(campaign: AutonomousCampaign): Promise<void> {
       });
 
       await logActivityEvent({ userId: campaign.userId, type: "outreach", title: `Auto-reply to ${step.leadName} (${intent})`, detail: `${step.company} — ${draft.subject}`, status: "done" });
+
+      // Score lead in background after every reply
+      scoreAndPersistLead({
+        campaignId: campaign.id,
+        leadId: step.leadId,
+        history: [
+          ...(step.conversationHistory ?? []),
+          { role: "user" as const, content: replyText, sentAt: new Date().toISOString() },
+          { role: "assistant" as const, content: draft.body, sentAt: new Date().toISOString() },
+        ],
+      }).catch(() => undefined);
     } catch { /* skip */ }
   }
 }

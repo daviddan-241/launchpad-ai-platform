@@ -238,6 +238,11 @@ export type AutoCampaignStep = {
   conversationHistory?: Array<{ role: 'assistant' | 'user'; content: string; sentAt: string }>;
   nextResponseAt?: string;
   followedUp?: boolean;
+  score?: number;            // 1-10 AI lead score
+  scoreReason?: string;      // brief explanation
+  scoreSignals?: string[];   // detected buying signals
+  scoreUrgency?: 'low' | 'medium' | 'high';
+  scoredAt?: string;
 };
 
 export type AutoCampaignStatus = "running" | "paused" | "completed" | "failed";

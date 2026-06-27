@@ -19,6 +19,11 @@ type Step = {
   lastActionAt: string;
   nextResponseAt?: string;
   followedUp?: boolean;
+  score?: number;
+  scoreReason?: string;
+  scoreSignals?: string[];
+  scoreUrgency?: "low" | "medium" | "high";
+  scoredAt?: string;
 };
 
 type Campaign = {
@@ -115,8 +120,19 @@ function ThreadView({ campaign, step, onBack, senderName }: {
             <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATE_COLOR[state] ?? "bg-slate-600 text-slate-100"}`}>
               {stateLabel}
             </span>
+            {step.score != null && (
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${step.score >= 8 ? "bg-emerald-400/20 text-emerald-300" : step.score >= 5 ? "bg-amber-400/20 text-amber-300" : "bg-slate-400/15 text-slate-400"}`}>
+                Score {step.score}/10
+              </span>
+            )}
+            {step.scoreUrgency === "high" && (
+              <span className="rounded-full border border-rose-400/30 bg-rose-400/10 px-2 py-0.5 text-xs font-medium text-rose-300">urgent</span>
+            )}
           </div>
           <p className="text-xs text-slate-400 truncate">{step.company} · {step.leadEmail}</p>
+          {step.scoreReason && (
+            <p className="mt-1 text-xs text-slate-500">{step.scoreReason}</p>
+          )}
         </div>
         {aiControlled && (
           <div className="flex items-center gap-1.5 rounded-2xl border border-fuchsia-400/20 bg-fuchsia-400/10 px-3 py-1.5">
@@ -208,6 +224,7 @@ export function ConversationsInbox({ campaigns, senderName }: { campaigns: Campa
   );
 
   const filtered = allThreads.filter((t) => {
+    if (filterState === "hot") return (t.score ?? 0) >= 7;
     if (filterState !== "all" && (t.conversationState ?? t.status) !== filterState) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -217,7 +234,11 @@ export function ConversationsInbox({ campaigns, senderName }: { campaigns: Campa
   });
 
   // Sort: most recently active first
-  const sorted = [...filtered].sort((a, b) => new Date(b.lastActionAt).getTime() - new Date(a.lastActionAt).getTime());
+  const sorted = [...filtered].sort((a, b) => {
+    const sa = a.score ?? 0; const sb = b.score ?? 0;
+    if (sb !== sa) return sb - sa;
+    return new Date(b.lastActionAt).getTime() - new Date(a.lastActionAt).getTime();
+  });
 
   const selectedCampaign = campaigns.find((c) => c.id === selectedCampaignId);
   const selectedStep = selectedCampaign?.steps.find((s) => s.leadId === selectedLeadId);
@@ -241,8 +262,10 @@ export function ConversationsInbox({ campaigns, senderName }: { campaigns: Campa
     stateCounts[s] = (stateCounts[s] ?? 0) + 1;
   }
 
+  const hotCount = allThreads.filter(t => (t.score ?? 0) >= 7).length;
   const FILTER_TABS = [
     { key: "all", label: `All (${allThreads.length})` },
+    { key: "hot", label: `Hot leads (${hotCount})` },
     { key: "in_conversation", label: `Talking (${stateCounts.in_conversation ?? 0})` },
     { key: "offer_made", label: `Offer sent (${stateCounts.offer_made ?? 0})` },
     { key: "payment_requested", label: `Payment sent (${stateCounts.payment_requested ?? 0})` },
@@ -322,14 +345,27 @@ export function ConversationsInbox({ campaigns, senderName }: { campaigns: Campa
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATE_COLOR[state] ?? "bg-slate-600 text-slate-100"}`}>
                       {state.replace(/_/g, " ")}
                     </span>
+                    {t.score != null && (
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${t.score >= 8 ? "bg-emerald-400/20 text-emerald-300" : t.score >= 5 ? "bg-amber-400/20 text-amber-300" : "bg-slate-400/15 text-slate-400"}`}>
+                        {t.score}/10
+                      </span>
+                    )}
                     <span className="text-xs text-slate-600">{timeAgo(t.lastActionAt)}</span>
                     {msgCount > 0 && (
                       <span className="text-xs text-slate-600">{msgCount} msg{msgCount !== 1 ? "s" : ""}</span>
                     )}
                   </div>
                 </div>
-                <div className="mt-2.5 ml-13">
+                <div className="mt-2.5 ml-13 flex flex-wrap items-center gap-3">
                   <p className="text-xs text-slate-600">{t.campaignName} · {t.campaignOffer}</p>
+                  {t.scoreReason && (
+                    <p className="text-xs text-slate-500 italic">{t.scoreReason}</p>
+                  )}
+                  {t.scoreUrgency === "high" && (
+                    <span className="rounded-full border border-rose-400/30 bg-rose-400/10 px-2 py-0.5 text-xs font-medium text-rose-300">
+                      urgent
+                    </span>
+                  )}
                 </div>
               </button>
             );
