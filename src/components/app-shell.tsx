@@ -16,6 +16,7 @@ const navItems = [
   { href: "/leads", label: "Leads" },
   { href: "/deals", label: "Deals" },
   { href: "/campaigns", label: "Campaigns" },
+  { href: "/conversations", label: "Conversations" },
   { href: "/payments", label: "Payments" },
   { href: "/delivery", label: "Delivery" },
   { href: "/inbox", label: "Inbox" },
