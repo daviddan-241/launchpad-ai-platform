@@ -217,6 +217,46 @@ export type AppStore = {
   paymentRequests: PaymentRequest[];
   deals: Deal[];
   deliveryProjects: DeliveryProject[];
+  autonomousCampaigns: AutonomousCampaign[];
+};
+
+
+export type AutoCampaignStepStatus = "pending" | "emailed" | "followed_up" | "replied" | "interested" | "payment_sent" | "paid" | "declined" | "no_reply";
+
+export type AutoCampaignStep = {
+  leadId: string;
+  leadName: string;
+  leadEmail: string;
+  company: string;
+  status: AutoCampaignStepStatus;
+  outreachJobId?: string;
+  replyText?: string;
+  paymentId?: string;
+  lastActionAt: string;
+};
+
+export type AutoCampaignStatus = "running" | "paused" | "completed" | "failed";
+
+export type AutonomousCampaign = {
+  id: string;
+  userId: string;
+  name: string;
+  niche: string;
+  offer: string;
+  price: number;
+  currency: string;
+  targetCount: number;
+  region?: string;
+  status: AutoCampaignStatus;
+  steps: AutoCampaignStep[];
+  emailAccountId: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  totalEmailed: number;
+  totalReplied: number;
+  totalPaid: number;
+  totalRevenue: number;
 };
 
 const dataRoot = process.env.DATA_DIR || path.join(process.cwd(), "data");
@@ -238,6 +278,7 @@ function seedStore(): AppStore {
     paymentRequests: [],
     deals: [],
     deliveryProjects: [],
+    autonomousCampaigns: [],
   };
 }
 
@@ -264,6 +305,7 @@ async function ensureStore() {
       paymentRequests: Array.isArray(parsed.paymentRequests) ? parsed.paymentRequests : [],
       deals: Array.isArray(parsed.deals) ? parsed.deals : [],
       deliveryProjects: Array.isArray(parsed.deliveryProjects) ? parsed.deliveryProjects : [],
+      autonomousCampaigns: Array.isArray(parsed.autonomousCampaigns) ? parsed.autonomousCampaigns : [],
     };
 
     await fs.writeFile(dataPath, JSON.stringify(hydrated, null, 2));

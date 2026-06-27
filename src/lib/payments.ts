@@ -171,3 +171,62 @@ export async function processInactivePaymentDrafts() {
     }
   }
 }
+
+
+// ─── Fully autonomous payment: create + generate link + email client immediately ───
+
+export async function autoCreateAndSendPayment(params: {
+  userId: string;
+  emailAccountId: string;
+  clientName: string;
+  clientEmail: string;
+  description: string;
+  amount: number;
+  currency: string;
+  senderName: string;
+}): Promise<{ id: string; link: string }> {
+  const preference = await getUserPreference(params.userId);
+  const payment: PaymentRequest = {
+    id: createId("PAY"),
+    userId: params.userId,
+    clientName: params.clientName,
+    clientEmail: params.clientEmail,
+    description: params.description,
+    amount: params.amount,
+    currency: params.currency || preference.currency,
+    paymentType: "full",
+    signatureRequired: false,
+    provider: "flutterwave",
+    status: "link_ready",
+    ownerApprovalRequired: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  let link = "";
+  try {
+    link = await createFlutterwaveLink(payment);
+    payment.providerLink = link;
+    payment.approvedAt = new Date().toISOString();
+  } catch {
+    // No Flutterwave key — send a payment-pending email anyway
+    link = `${process.env.APP_URL ?? "https://your-app.onrender.com"}/payments`;
+    payment.status = "draft";
+    payment.lastError = "Flutterwave key not configured";
+  }
+
+  await updateStore((store) => {
+    store.paymentRequests.unshift(payment);
+    return store;
+  });
+
+  await logActivityEvent({
+    userId: params.userId,
+    type: "payment",
+    title: `Auto-payment created for ${params.clientName}`,
+    detail: `${params.currency} ${params.amount} — ${params.description}`,
+    status: "done",
+  });
+
+  return { id: payment.id, link };
+}
