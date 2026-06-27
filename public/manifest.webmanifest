@@ -9,60 +9,16 @@
   "background_color": "#0b0610",
   "theme_color": "#0b0610",
   "icons": [
-    {
-      "src": "/leadforge-icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/leadforge-icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/leadforge-icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "/apple-touch-icon.png",
-      "sizes": "180x180",
-      "type": "image/png",
-      "purpose": "any"
-    }
+    { "src": "/leadforge-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/leadforge-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/leadforge-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
   ],
   "categories": ["business", "productivity"],
   "shortcuts": [
-    {
-      "name": "Chat",
-      "short_name": "Chat",
-      "url": "/chat",
-      "description": "Open the command interface",
-      "icons": [{ "src": "/leadforge-icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Leads",
-      "short_name": "Leads",
-      "url": "/leads",
-      "description": "View and search leads",
-      "icons": [{ "src": "/leadforge-icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Deals",
-      "short_name": "Deals",
-      "url": "/deals",
-      "description": "View deal board",
-      "icons": [{ "src": "/leadforge-icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Payments",
-      "short_name": "Payments",
-      "url": "/payments",
-      "description": "View and manage payments",
-      "icons": [{ "src": "/leadforge-icon-192.png", "sizes": "192x192" }]
-    }
+    { "name": "Chat", "url": "/chat", "icons": [{ "src": "/leadforge-icon-192.png", "sizes": "192x192" }] },
+    { "name": "Leads", "url": "/leads", "icons": [{ "src": "/leadforge-icon-192.png", "sizes": "192x192" }] },
+    { "name": "Deals", "url": "/deals", "icons": [{ "src": "/leadforge-icon-192.png", "sizes": "192x192" }] },
+    { "name": "Payments", "url": "/payments", "icons": [{ "src": "/leadforge-icon-192.png", "sizes": "192x192" }] }
   ]
 }

@@ -1,8 +1,9 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import { getEncryptionKey } from "@/lib/config";
 
 function getKey() {
-  const source = process.env.APP_ENCRYPTION_KEY || process.env.SESSION_SECRET || "leadforge-dev-encryption-key-change-in-production";
-  return createHash("sha256").update(source).digest();
+  return createHash("sha256").update(getEncryptionKey()).digest();
 }
 
 export function encryptText(value: string) {

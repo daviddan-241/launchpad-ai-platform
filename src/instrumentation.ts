@@ -14,13 +14,8 @@ function startSelfPing() {
   const appUrl = process.env.APP_URL;
   if (!appUrl) return;
 
-  const interval = 14 * 60 * 1000;
-
-  const ping = () => {
-    fetch(`${appUrl}/api/ping`, { method: "GET" }).catch(() => undefined);
-  };
-
-  const timer = setInterval(ping, interval);
+  const ping = () => fetch(`${appUrl}/api/ping`, { method: "GET" }).catch(() => undefined);
+  const timer = setInterval(ping, 14 * 60 * 1000);
   timer.unref?.();
   setTimeout(ping, 30_000);
 }
