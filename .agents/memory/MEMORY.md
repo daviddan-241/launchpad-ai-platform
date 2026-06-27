@@ -1,0 +1,1 @@
+- [LeadForge Mobile App](mobile-app.md) — Expo companion at artifacts/mobile/, standalone personal tool with AsyncStorage + direct Gemini/Groq AI calls

@@ -1,0 +1,222 @@
+2026-06-27T19:29:30.876890852Z ==> Cloning from https://github.com/daviddan-241/launchpad-ai-platform
+2026-06-27T19:29:31.454973049Z ==> Checking out commit 9dd51c7720eca2e5a8d71daadef259e67a0e666d in branch main
+2026-06-27T19:29:33.201341636Z #1 [internal] load build definition from Dockerfile
+2026-06-27T19:29:33.201369917Z #1 transferring dockerfile: 611B done
+2026-06-27T19:29:33.201374587Z #1 DONE 0.0s
+2026-06-27T19:29:33.201378507Z 
+2026-06-27T19:29:33.201382517Z #2 [internal] load metadata for docker.io/library/node:20-alpine
+2026-06-27T19:29:33.732571869Z #2 ...
+2026-06-27T19:29:33.732589419Z 
+2026-06-27T19:29:33.732594609Z #3 [auth] library/node:pull render-prod/docker-mirror-repository/library/node:pull token for us-west1-docker.pkg.dev
+2026-06-27T19:29:33.732598729Z #3 DONE 0.0s
+2026-06-27T19:29:33.883207874Z 
+2026-06-27T19:29:33.883226154Z #2 [internal] load metadata for docker.io/library/node:20-alpine
+2026-06-27T19:29:35.444794698Z #2 DONE 2.4s
+2026-06-27T19:29:35.555595586Z 
+2026-06-27T19:29:35.555622147Z #4 [internal] load .dockerignore
+2026-06-27T19:29:35.555627227Z #4 transferring context: 2B done
+2026-06-27T19:29:35.555631977Z #4 DONE 0.0s
+2026-06-27T19:29:35.555636677Z 
+2026-06-27T19:29:35.555642237Z #5 [base 1/2] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+2026-06-27T19:29:35.555648487Z #5 resolve docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 0.0s done
+2026-06-27T19:29:35.78372374Z #6 transferring context: 10.81MB 0.1s done
+2026-06-27T19:29:35.78372764Z #6 DONE 0.2s
+2026-06-27T19:29:35.78373132Z 
+2026-06-27T19:29:35.78373552Z #5 [base 1/2] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+2026-06-27T19:29:37.004398479Z #5 extracting sha256:6a0ac1617861a677b045b7ff88545213ec31c0ff08763195a70a4a5adda577bb 0.1s done
+2026-06-27T19:29:37.656623995Z #5 extracting sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287
+2026-06-27T19:29:38.954136649Z #5 extracting sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287 1.4s done
+2026-06-27T19:29:38.95416012Z #5 DONE 3.5s
+2026-06-27T19:29:39.062098838Z 
+2026-06-27T19:29:39.062130579Z #5 [base 1/2] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+2026-06-27T19:29:39.062140929Z #5 extracting sha256:b2cbbfe903b0821005780971ddc5892edcc4ce74c5a48d82e1d2b382edac3122 0.1s done
+2026-06-27T19:29:39.062147829Z #5 extracting sha256:fff4e2c1b189bf87d63ad8bd07f7f4eb288d6f2b6a07a8bb44c60e8c075d2096 0.0s done
+2026-06-27T19:29:39.062153649Z #5 DONE 3.5s
+2026-06-27T19:29:39.062159669Z 
+2026-06-27T19:29:39.06216823Z #7 [base 2/2] WORKDIR /app
+2026-06-27T19:29:39.06217418Z #7 DONE 0.0s
+2026-06-27T19:29:39.0621803Z 
+2026-06-27T19:29:39.06218678Z #8 [deps 1/2] COPY package.json ./
+2026-06-27T19:29:39.06220112Z #8 DONE 0.0s
+2026-06-27T19:29:39.06220672Z 
+2026-06-27T19:29:39.06221284Z #9 [runner 1/5] RUN mkdir -p /var/data/leadforge
+2026-06-27T19:29:39.277549975Z #9 DONE 0.1s
+2026-06-27T19:29:39.277578496Z 
+2026-06-27T19:29:39.277583976Z #10 [deps 2/2] RUN npm install --legacy-peer-deps
+2026-06-27T19:29:59.463399651Z #10 20.40 
+2026-06-27T19:29:59.463423831Z #10 20.40 added 389 packages, and audited 390 packages in 20s
+2026-06-27T19:29:59.463428612Z #10 20.40 
+2026-06-27T19:29:59.649037492Z #10 20.40 148 packages are looking for funding
+2026-06-27T19:30:00.266518677Z #10 20.40   run `npm fund` for details
+2026-06-27T19:30:00.266549467Z #10 20.43 
+2026-06-27T19:30:00.266554648Z #10 20.43 2 moderate severity vulnerabilities
+2026-06-27T19:30:00.266558978Z #10 20.43 
+2026-06-27T19:30:00.266563618Z #10 20.43 To address all issues (including breaking changes), run:
+2026-06-27T19:30:00.266567708Z #10 20.43   npm audit fix --force
+2026-06-27T19:30:00.266574018Z #10 20.43 
+2026-06-27T19:30:00.266577668Z #10 20.43 Run `npm audit` for details.
+2026-06-27T19:30:00.266582208Z #10 20.44 npm notice
+2026-06-27T19:30:00.266586198Z #10 20.44 npm notice New major version of npm available! 10.8.2 -> 11.17.0
+2026-06-27T19:30:00.266590019Z #10 20.44 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.17.0
+2026-06-27T19:30:00.266594828Z #10 20.44 npm notice To update run: npm install -g npm@11.17.0
+2026-06-27T19:30:00.266598389Z #10 20.44 npm notice
+2026-06-27T19:30:06.61038581Z #10 DONE 27.5s
+2026-06-27T19:30:08.352406656Z 
+2026-06-27T19:30:08.352434376Z #11 [builder 1/3] COPY --from=deps /app/node_modules ./node_modules
+2026-06-27T19:30:14.349462642Z #11 DONE 6.0s
+2026-06-27T19:30:14.50212476Z 
+2026-06-27T19:30:14.50214897Z #12 [builder 2/3] COPY . .
+2026-06-27T19:30:14.715979044Z #12 DONE 0.4s
+2026-06-27T19:30:14.868611611Z 
+2026-06-27T19:30:14.868639181Z #13 [builder 3/3] RUN npm run build
+2026-06-27T19:30:15.169659077Z #13 0.452 
+2026-06-27T19:30:15.169677887Z #13 0.452 > leadforge@0.1.0 build
+2026-06-27T19:30:15.169682037Z #13 0.452 > next build
+2026-06-27T19:30:15.169685207Z #13 0.452 
+2026-06-27T19:30:15.73709054Z #13 1.019 ▲ Next.js 16.2.9 (Turbopack)
+2026-06-27T19:30:15.927845839Z #13 1.020 
+2026-06-27T19:30:15.927871609Z #13 1.059   Creating an optimized production build ...
+2026-06-27T19:30:23.092905937Z #13 8.374 ✓ Compiled successfully in 7.0s
+2026-06-27T19:30:23.319896127Z #13 8.377   Running TypeScript ...
+2026-06-27T19:30:28.743934342Z #13 14.03 Failed to type check.
+2026-06-27T19:30:28.743964053Z #13 14.03 
+2026-06-27T19:30:28.869182704Z #13 14.03 ./lib/api-client-react/src/generated/api.ts:8:26
+2026-06-27T19:30:28.869202724Z #13 14.03 Type error: Cannot find module '@tanstack/react-query' or its corresponding type declarations.
+2026-06-27T19:30:28.869206414Z #13 14.03 
+2026-06-27T19:30:28.869211574Z #13 14.03    6 |  * OpenAPI spec version: 0.1.0
+2026-06-27T19:30:28.869216965Z #13 14.03    7 |  */
+2026-06-27T19:30:28.869221745Z #13 14.03 >  8 | import { useQuery } from "@tanstack/react-query";
+2026-06-27T19:30:28.869224935Z #13 14.03      |                          ^
+2026-06-27T19:30:28.869228025Z #13 14.03    9 | import type {
+2026-06-27T19:30:28.869231025Z #13 14.03   10 |   QueryFunction,
+2026-06-27T19:30:28.869234075Z #13 14.03   11 |   QueryKey,
+2026-06-27T19:30:28.869237125Z #13 14.10 Next.js build worker exited with code: 1 and signal: null
+2026-06-27T19:30:28.869240895Z #13 14.15 npm notice
+2026-06-27T19:30:28.869244095Z #13 14.15 npm notice New major version of npm available! 10.8.2 -> 11.17.0
+2026-06-27T19:30:28.869247135Z #13 14.15 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.17.0
+2026-06-27T19:30:28.869250145Z #13 14.15 npm notice To update run: npm install -g npm@11.17.0
+2026-06-27T19:30:28.869253226Z #13 14.15 npm notice
+2026-06-27T19:30:29.012433754Z #13 ERROR: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+2026-06-27T19:30:29.076523051Z ------
+2026-06-27T19:30:29.076540841Z  > [builder 3/3] RUN npm run build:
+2026-06-27T19:30:29.076557131Z 14.03      |                          ^
+2026-06-27T19:30:29.076559942Z 14.03    9 | import type {
+2026-06-27T19:30:29.076562442Z 14.03   10 |   QueryFunction,
+2026-06-27T19:30:29.076564772Z 14.03   11 |   QueryKey,
+2026-06-27T19:30:29.076567142Z 14.10 Next.js build worker exited with code: 1 and signal: null
+2026-06-27T19:30:29.076569582Z 14.15 npm notice
+2026-06-27T19:30:29.076572192Z 14.15 npm notice New major version of npm available! 10.8.2 -> 11.17.0
+2026-06-27T19:30:29.076574662Z 14.15 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.17.0
+2026-06-27T19:30:29.076577072Z 14.15 npm notice To update run: npm install -g npm@11.17.0
+2026-06-27T19:30:29.076579472Z 14.15 npm notice
+2026-06-27T19:30:29.076581892Z ------
+2026-06-27T19:30:29.077215415Z Dockerfile:12
+2026-06-27T19:30:29.077238536Z --------------------
+2026-06-27T19:30:29.077242366Z   10 |     COPY --from=deps /app/node_modules ./node_modules
+2026-06-27T19:30:29.077244616Z   11 |     COPY . .
+2026-06-27T19:30:29.077246786Z   12 | >>> RUN npm run build
+2026-06-27T19:30:29.077248686Z   13 |     
+2026-06-27T19:30:29.077250626Z   14 |     FROM base AS runner
+2026-06-27T19:30:29.077252536Z --------------------
+2026-06-27T19:30:29.077254596Z error: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+2026-06-27T19:29:35.78372374Z #6 transferring context: 10.81MB 0.1s done
+2026-06-27T19:29:35.78372764Z #6 DONE 0.2s
+2026-06-27T19:29:35.78373132Z 
+2026-06-27T19:29:35.78373552Z #5 [base 1/2] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+2026-06-27T19:29:37.004398479Z #5 extracting sha256:6a0ac1617861a677b045b7ff88545213ec31c0ff08763195a70a4a5adda577bb 0.1s done
+2026-06-27T19:29:37.656623995Z #5 extracting sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287
+2026-06-27T19:29:38.954136649Z #5 extracting sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287 1.4s done
+2026-06-27T19:29:38.95416012Z #5 DONE 3.5s
+2026-06-27T19:29:39.062098838Z 
+2026-06-27T19:29:39.062130579Z #5 [base 1/2] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+2026-06-27T19:29:39.062140929Z #5 extracting sha256:b2cbbfe903b0821005780971ddc5892edcc4ce74c5a48d82e1d2b382edac3122 0.1s done
+2026-06-27T19:29:39.062147829Z #5 extracting sha256:fff4e2c1b189bf87d63ad8bd07f7f4eb288d6f2b6a07a8bb44c60e8c075d2096 0.0s done
+2026-06-27T19:29:39.062153649Z #5 DONE 3.5s
+2026-06-27T19:29:39.062159669Z 
+2026-06-27T19:29:39.06216823Z #7 [base 2/2] WORKDIR /app
+2026-06-27T19:29:39.06217418Z #7 DONE 0.0s
+2026-06-27T19:29:39.0621803Z 
+2026-06-27T19:29:39.06218678Z #8 [deps 1/2] COPY package.json ./
+2026-06-27T19:29:39.06220112Z #8 DONE 0.0s
+2026-06-27T19:29:39.06220672Z 
+2026-06-27T19:29:39.06221284Z #9 [runner 1/5] RUN mkdir -p /var/data/leadforge
+2026-06-27T19:29:39.277549975Z #9 DONE 0.1s
+2026-06-27T19:29:39.277578496Z 
+2026-06-27T19:29:39.277583976Z #10 [deps 2/2] RUN npm install --legacy-peer-deps
+2026-06-27T19:29:59.463399651Z #10 20.40 
+2026-06-27T19:29:59.463423831Z #10 20.40 added 389 packages, and audited 390 packages in 20s
+2026-06-27T19:29:59.463428612Z #10 20.40 
+2026-06-27T19:29:59.649037492Z #10 20.40 148 packages are looking for funding
+2026-06-27T19:30:00.266518677Z #10 20.40   run `npm fund` for details
+2026-06-27T19:30:00.266549467Z #10 20.43 
+2026-06-27T19:30:00.266554648Z #10 20.43 2 moderate severity vulnerabilities
+2026-06-27T19:30:00.266558978Z #10 20.43 
+2026-06-27T19:30:00.266563618Z #10 20.43 To address all issues (including breaking changes), run:
+2026-06-27T19:30:00.266567708Z #10 20.43   npm audit fix --force
+2026-06-27T19:30:00.266574018Z #10 20.43 
+2026-06-27T19:30:00.266577668Z #10 20.43 Run `npm audit` for details.
+2026-06-27T19:30:00.266582208Z #10 20.44 npm notice
+2026-06-27T19:30:00.266586198Z #10 20.44 npm notice New major version of npm available! 10.8.2 -> 11.17.0
+2026-06-27T19:30:00.266590019Z #10 20.44 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.17.0
+2026-06-27T19:30:00.266594828Z #10 20.44 npm notice To update run: npm install -g npm@11.17.0
+2026-06-27T19:30:00.266598389Z #10 20.44 npm notice
+2026-06-27T19:30:06.61038581Z #10 DONE 27.5s
+2026-06-27T19:30:08.352406656Z 
+2026-06-27T19:30:08.352434376Z #11 [builder 1/3] COPY --from=deps /app/node_modules ./node_modules
+2026-06-27T19:30:14.349462642Z #11 DONE 6.0s
+2026-06-27T19:30:14.50212476Z 
+2026-06-27T19:30:14.50214897Z #12 [builder 2/3] COPY . .
+2026-06-27T19:30:14.715979044Z #12 DONE 0.4s
+2026-06-27T19:30:14.868611611Z 
+2026-06-27T19:30:14.868639181Z #13 [builder 3/3] RUN npm run build
+2026-06-27T19:30:15.169659077Z #13 0.452 
+2026-06-27T19:30:15.169677887Z #13 0.452 > leadforge@0.1.0 build
+2026-06-27T19:30:15.169682037Z #13 0.452 > next build
+2026-06-27T19:30:15.169685207Z #13 0.452 
+2026-06-27T19:30:15.73709054Z #13 1.019 ▲ Next.js 16.2.9 (Turbopack)
+2026-06-27T19:30:15.927845839Z #13 1.020 
+2026-06-27T19:30:15.927871609Z #13 1.059   Creating an optimized production build ...
+2026-06-27T19:30:23.092905937Z #13 8.374 ✓ Compiled successfully in 7.0s
+2026-06-27T19:30:23.319896127Z #13 8.377   Running TypeScript ...
+2026-06-27T19:30:28.743934342Z #13 14.03 Failed to type check.
+2026-06-27T19:30:28.743964053Z #13 14.03 
+2026-06-27T19:30:28.869182704Z #13 14.03 ./lib/api-client-react/src/generated/api.ts:8:26
+2026-06-27T19:30:28.869202724Z #13 14.03 Type error: Cannot find module '@tanstack/react-query' or its corresponding type declarations.
+2026-06-27T19:30:28.869206414Z #13 14.03 
+2026-06-27T19:30:28.869211574Z #13 14.03    6 |  * OpenAPI spec version: 0.1.0
+2026-06-27T19:30:28.869216965Z #13 14.03    7 |  */
+2026-06-27T19:30:28.869221745Z #13 14.03 >  8 | import { useQuery } from "@tanstack/react-query";
+2026-06-27T19:30:28.869224935Z #13 14.03      |                          ^
+2026-06-27T19:30:28.869228025Z #13 14.03    9 | import type {
+2026-06-27T19:30:28.869231025Z #13 14.03   10 |   QueryFunction,
+2026-06-27T19:30:28.869234075Z #13 14.03   11 |   QueryKey,
+2026-06-27T19:30:28.869237125Z #13 14.10 Next.js build worker exited with code: 1 and signal: null
+2026-06-27T19:30:28.869240895Z #13 14.15 npm notice
+2026-06-27T19:30:28.869244095Z #13 14.15 npm notice New major version of npm available! 10.8.2 -> 11.17.0
+2026-06-27T19:30:28.869247135Z #13 14.15 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.17.0
+2026-06-27T19:30:28.869250145Z #13 14.15 npm notice To update run: npm install -g npm@11.17.0
+2026-06-27T19:30:28.869253226Z #13 14.15 npm notice
+2026-06-27T19:30:29.012433754Z #13 ERROR: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+2026-06-27T19:30:29.076523051Z ------
+2026-06-27T19:30:29.076540841Z  > [builder 3/3] RUN npm run build:
+2026-06-27T19:30:29.076557131Z 14.03      |                          ^
+2026-06-27T19:30:29.076559942Z 14.03    9 | import type {
+2026-06-27T19:30:29.076562442Z 14.03   10 |   QueryFunction,
+2026-06-27T19:30:29.076564772Z 14.03   11 |   QueryKey,
+2026-06-27T19:30:29.076567142Z 14.10 Next.js build worker exited with code: 1 and signal: null
+2026-06-27T19:30:29.076569582Z 14.15 npm notice
+2026-06-27T19:30:29.076572192Z 14.15 npm notice New major version of npm available! 10.8.2 -> 11.17.0
+2026-06-27T19:30:29.076574662Z 14.15 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.17.0
+2026-06-27T19:30:29.076577072Z 14.15 npm notice To update run: npm install -g npm@11.17.0
+2026-06-27T19:30:29.076579472Z 14.15 npm notice
+2026-06-27T19:30:29.076581892Z ------
+2026-06-27T19:30:29.077215415Z Dockerfile:12
+2026-06-27T19:30:29.077238536Z --------------------
+2026-06-27T19:30:29.077242366Z   10 |     COPY --from=deps /app/node_modules ./node_modules
+2026-06-27T19:30:29.077244616Z   11 |     COPY . .
+2026-06-27T19:30:29.077246786Z   12 | >>> RUN npm run build
+2026-06-27T19:30:29.077248686Z   13 |     
+2026-06-27T19:30:29.077250626Z   14 |     FROM base AS runner
+2026-06-27T19:30:29.077252536Z --------------------
+2026-06-27T19:30:29.077254596Z error: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+2026-06-27T19:30:29.103285523Z error: exit status 1
