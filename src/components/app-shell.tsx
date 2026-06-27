@@ -14,6 +14,7 @@ const navItems = [
   { href: "/activity", label: "Activity" },
   { href: "/projects", label: "Projects" },
   { href: "/dashboard", label: "Overview" },
+  { href: "/analytics", label: "Analytics" },
   { href: "/leads", label: "Leads" },
   { href: "/deals", label: "Deals" },
   { href: "/campaigns", label: "Campaigns" },

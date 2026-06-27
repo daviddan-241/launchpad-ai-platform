@@ -178,6 +178,7 @@ export const NAV_ICONS: Record<string, (props: IconProps) => JSX.Element> = {
   "/activity": IconActivity,
   "/projects": IconPortfolio,
   "/dashboard": IconTrending,
+  "/analytics": IconActivity,
   "/leads": IconUsers,
   "/deals": IconTarget,
   "/campaigns": IconAutopilot,
