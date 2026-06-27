@@ -1,5 +1,6 @@
 import { logActivityEvent } from "@/lib/activity";
-import { generateSequencePlan, type Lead } from "@/lib/demo-data";
+import { generateSequencePlan } from "@/lib/ai-sequence";
+import { type Lead } from "@/lib/demo-data";
 import { generateWorkspaceNarration } from "@/lib/ai";
 import { addDealNote, addDealTask, createDeal, createDeliveryProject, moveDealStage } from "@/lib/crm";
 import { createPaymentDraft } from "@/lib/payments";
@@ -155,7 +156,7 @@ export async function runAssistantCommand(prompt: string, user: User): Promise<A
       if (note) research.push(note);
     }
   }
-  const plan = generateSequencePlan(prompt);
+  const plan = await generateSequencePlan(prompt);
   const proposal = buildProposal(prompt, pricing);
   const actions: AssistantAction[] = [];
 
