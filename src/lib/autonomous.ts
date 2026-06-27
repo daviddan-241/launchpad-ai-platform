@@ -1,242 +1,275 @@
 import { logActivityEvent } from "@/lib/activity";
 import { sendEmailWithAccount } from "@/lib/email";
 import { autoCreateAndSendPayment } from "@/lib/payments";
+import { detectBusinessNeeds } from "@/lib/business-detector";
+import { generateAndSavePortfolio } from "@/lib/portfolio-generator";
+import { notifyInterestedReply, notifyPaymentLinkSent } from "@/lib/notifications";
 import { createId, readStore, updateStore, type AutonomousCampaign, type AutoCampaignStep } from "@/lib/store";
 
-// ─── AI helpers ────────────────────────────────────────────────────────────
+// ─── AI Core ────────────────────────────────────────────────────────────────
 
-async function callAI(systemPrompt: string, userPrompt: string, json = false): Promise<string> {
-  const geminiKey = process.env.GEMINI_API_KEY;
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-
-  if (geminiKey) {
+async function callGemini(systemPrompt: string, userPrompt: string, json = false): Promise<string> {
+  const key = process.env.GEMINI_API_KEY;
+  const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  if (!key) return "";
+  try {
     const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: {
-            temperature: 0.55,
-            ...(json ? { responseMimeType: "application/json" } : {}),
-          },
+          generationConfig: { temperature: 0.65, ...(json ? { responseMimeType: "application/json" } : {}) },
         }),
       },
     );
     if (resp.ok) {
-      const payload = (await resp.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-      const text = payload.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
-      if (text) return text;
+      const d = (await resp.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+      return d.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
     }
-  }
+  } catch { /* fallback */ }
 
   const groqKey = process.env.GROQ_API_KEY;
   const groqModel = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
   if (groqKey) {
-    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: groqModel,
-        temperature: 0.5,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-      }),
-    });
-    if (resp.ok) {
-      const payload = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
-      const text = payload.choices?.[0]?.message?.content?.trim() ?? "";
-      if (text) return text;
-    }
+    try {
+      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: groqModel, temperature: 0.6,
+          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+        }),
+      });
+      if (resp.ok) {
+        const d = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
+        return d.choices?.[0]?.message?.content?.trim() ?? "";
+      }
+    } catch { /* skip */ }
   }
-
   return "";
 }
 
-// ─── Lead generation ────────────────────────────────────────────────────────
+// ─── Persona System ──────────────────────────────────────────────────────────
+// The AI consultant persona — sounds like a real person, not a bot
 
-type RawLead = {
-  name: string;
-  email: string;
-  company: string;
-  title: string;
-  industry: string;
-  region: string;
-  painPoint: string;
-};
+function buildPersona(senderName: string, offer: string): string {
+  const firstName = senderName.split(" ")[0];
+  return `You are ${firstName}, a digital growth consultant with 9 years of experience helping small and medium businesses grow online. You specialise in ${offer}.
+
+PERSONALITY RULES — follow these exactly:
+- Write like a real human. Short sentences. Natural. Never formal.
+- Max 3-4 sentences per message. Often just 1-2 sentences.
+- Use contractions (don't, I've, it's, you're, we'll).
+- Never say "I hope this finds you well", "I wanted to reach out", "as an AI", "as a language model".
+- Never use bullet points or headers in emails. Just short paragraphs.
+- Be warm and curious. Ask one question at a time.
+- When giving price, be casual: "It's usually around $X depending on scope" not "The investment is..."
+- If they haven't asked for price, don't mention it.
+- Sound like someone who's worked with dozens of similar businesses. Reference that naturally when relevant.
+- If they ask if you're real, say yes. You're a person, not a bot.
+- Never be pushy. If they need time, give them time.
+- Only offer to send a payment link if they explicitly say they're ready, want to go ahead, or ask how to pay.`;
+}
+
+// ─── Message classification ───────────────────────────────────────────────
+
+type MessageIntent =
+  | "interested"       // generally positive, wants to learn more
+  | "asking_price"     // asks about cost/pricing
+  | "ready_to_pay"     // "let's do it", "send the link", "how do I pay", "I'm in"
+  | "wants_portfolio"  // "do you have examples", "can I see your work", "past clients"
+  | "needs_more_info"  // has specific questions about the offer
+  | "asking_timeline"  // "how long does it take"
+  | "asking_process"   // "how does it work", "what's the process"
+  | "objection"        // "not sure", "we tried this before", "too expensive", "already have someone"
+  | "not_interested"   // "no thanks", "not for us", "unsubscribe", "remove me"
+  | "neutral"          // unclear, generic reply
+  | "other";
+
+async function classifyIntent(replyText: string): Promise<MessageIntent> {
+  const system = `Classify this email reply into EXACTLY ONE of these intents (return only the word):
+interested | asking_price | ready_to_pay | wants_portfolio | needs_more_info | asking_timeline | asking_process | objection | not_interested | neutral | other
+
+ready_to_pay = they explicitly say yes/let's go/send the link/how do I pay.
+not_interested = clear rejection, unsubscribe, stop emailing.
+objection = doubt, previous bad experience, cost concern.`;
+  const text = await callGemini(system, `Email reply: "${replyText.slice(0, 600)}"`, false);
+  const intents: MessageIntent[] = ["interested","asking_price","ready_to_pay","wants_portfolio","needs_more_info","asking_timeline","asking_process","objection","not_interested","neutral","other"];
+  const found = intents.find((i) => text.toLowerCase().includes(i));
+  return found ?? "neutral";
+}
+
+// ─── Response generators ──────────────────────────────────────────────────
+
+async function genOutreachEmail(params: {
+  leadName: string; company: string; niche: string; offer: string;
+  senderName: string; hook: string; region: string;
+}): Promise<{ subject: string; body: string }> {
+  const persona = buildPersona(params.senderName, params.offer);
+  const system = `${persona}
+
+Write a COLD OUTREACH email. Rules:
+- Subject line: max 6 words, lowercase, conversational (not salesy)
+- Body: 2-3 short sentences. Just open a conversation. Don't pitch hard.
+- End with ONE casual question.
+- DO NOT mention price.
+- DO NOT say "I'm reaching out because..."
+- Use the hook naturally if it fits.
+- Return JSON: {subject, body}`;
+
+  const prompt = `Write cold email to ${params.leadName}, owner/manager at ${params.company} (${params.niche} business in ${params.region || "their city"}).
+Their likely issue: ${params.hook}.
+Your offer (don't push it yet): ${params.offer}.
+Sender: ${params.senderName}.`;
+
+  const text = await callGemini(system, prompt, true);
+  try {
+    const p = JSON.parse(text.replace(/```json|```/g, "").trim()) as { subject?: string; body?: string };
+    if (p.subject && p.body) return { subject: p.subject, body: p.body };
+  } catch { /* fallback */ }
+  return {
+    subject: `quick question about ${params.company}`,
+    body: `Hi ${params.leadName.split(" ")[0]},\n\nI work with ${params.niche} businesses on ${params.offer} and noticed ${params.company} — thought it might be relevant.\n\nIs this something you're currently looking to improve?\n\n${params.senderName}`,
+  };
+}
+
+async function genConversationReply(params: {
+  leadName: string; company: string; niche: string; offer: string;
+  senderName: string; price: number; currency: string;
+  conversationHistory: string; latestReply: string; intent: MessageIntent;
+  portfolioUrl?: string;
+}): Promise<{ subject: string; body: string }> {
+  const persona = buildPersona(params.senderName, params.offer);
+  const system = `${persona}
+
+You're replying to an ongoing email conversation. Rules:
+- Keep it SHORT. 2-4 sentences max.
+- Match their energy. If they're brief, be brief.
+- Never sound like a sales robot.
+- Don't repeat yourself from earlier messages.
+- If intent is "asking_price": give a casual price range. Don't list features.
+- If intent is "wants_portfolio": share the portfolio link naturally.
+- If intent is "asking_timeline": give a real estimate casually.
+- If intent is "asking_process": explain in 2 sentences, naturally.
+- If intent is "objection": acknowledge it, don't argue. Ask what went wrong before or what their concern is.
+- If intent is "interested": continue the conversation, ask about their specific situation.
+- NEVER offer to send a payment link unless they ask how to pay or say they're ready.
+- Return JSON: {subject, body}`;
+
+  const prompt = `Conversation so far:
+${params.conversationHistory}
+
+Their latest reply: "${params.latestReply}"
+Intent detected: ${params.intent}
+${params.portfolioUrl ? `Portfolio URL to share if relevant: ${params.portfolioUrl}` : ""}
+
+Write a natural, human reply from ${params.senderName}.`;
+
+  const text = await callGemini(system, prompt, true);
+  try {
+    const p = JSON.parse(text.replace(/```json|```/g, "").trim()) as { subject?: string; body?: string };
+    if (p.subject && p.body) return { subject: p.subject, body: p.body };
+  } catch { /* fallback */ }
+  return {
+    subject: `Re: ${params.company}`,
+    body: `Thanks for getting back to me. ${params.intent === "asking_price" ? `It's usually around ${params.currency} ${params.price} depending on your specific needs.` : "Happy to tell you more about how it works."}\n\nWhat's your current situation with ${params.offer.split(" ")[0]}?\n\n${params.senderName}`,
+  };
+}
+
+async function genPaymentReadyReply(params: {
+  leadName: string; company: string; offer: string;
+  senderName: string; price: number; currency: string; paymentLink: string;
+}): Promise<{ subject: string; body: string }> {
+  const firstName = params.leadName.split(" ")[0];
+  const body = `${firstName}, great — glad we're on the same page.
+
+Here's the payment link to get started: ${params.paymentLink}
+
+Once that's done I'll kick things off within 24 hours. Let me know if you have any questions before then.
+
+${params.senderName}`;
+  return { subject: `Re: ${params.offer} — payment link`, body };
+}
+
+async function genFollowUpEmail(params: {
+  leadName: string; company: string; offer: string; senderName: string;
+  conversationHistory: string; daysSinceLastContact: number;
+}): Promise<{ subject: string; body: string }> {
+  const persona = buildPersona(params.senderName, params.offer);
+  const system = `${persona}
+
+Write a short follow-up email to someone who hasn't replied. Rules:
+- Max 2 sentences + question.
+- Not needy. Just checking in.
+- Sound like a real person, not a drip campaign.
+- Reference something specific if possible.
+- Return JSON: {subject, body}`;
+
+  const prompt = `Follow up to ${params.leadName} at ${params.company}. It's been ${params.daysSinceLastContact} days since last contact about ${params.offer}. Previous messages: ${params.conversationHistory.slice(0, 300)}.`;
+  const text = await callGemini(system, prompt, true);
+  try {
+    const p = JSON.parse(text.replace(/```json|```/g, "").trim()) as { subject?: string; body?: string };
+    if (p.subject && p.body) return { subject: p.subject, body: p.body };
+  } catch { /* fallback */ }
+  return {
+    subject: `still relevant?`,
+    body: `Hey ${params.leadName.split(" ")[0]}, just circling back on this — is ${params.offer} still something worth exploring for ${params.company}?\n\n${params.senderName}`,
+  };
+}
+
+// ─── Human-like delay system ─────────────────────────────────────────────
+
+function humanDelay(): number {
+  // 3-18 minutes in ms — randomised to feel natural
+  const minutes = 3 + Math.random() * 15;
+  return Math.floor(minutes * 60 * 1000);
+}
+
+function shouldRespondNow(step: AutoCampaignStep): boolean {
+  if (!step.nextResponseAt) return true;
+  return Date.now() >= new Date(step.nextResponseAt).getTime();
+}
+
+function setNextResponseTime(step: AutoCampaignStep): void {
+  step.nextResponseAt = new Date(Date.now() + humanDelay()).toISOString();
+}
+
+// ─── Lead generation ─────────────────────────────────────────────────────
+
+type RawLead = { name: string; email: string; company: string; industry: string; region: string };
 
 async function generateLeads(niche: string, count: number, region?: string): Promise<RawLead[]> {
-  const system = [
-    "You are a B2B lead intelligence engine.",
-    "Generate realistic, specific business lead profiles matching the user's niche.",
-    "Return ONLY a valid JSON array. No markdown, no explanation.",
-    `Each object must have: name, email, company, title, industry, region, painPoint.`,
-    "Make names, companies, and emails realistic. Email format: firstname.lastname@company.com or info@company.com.",
-    "painPoint should be a specific business problem they likely have that the offer solves.",
-  ].join(" ");
+  const system = `You are a B2B lead intelligence engine. Generate realistic business lead profiles.
+Return ONLY a valid JSON array. No markdown.
+Each object: name, email, company, industry, region.
+Make emails realistic (firstname.lastname@company.com or info@company.com).
+Generate exactly ${count} leads.`;
 
   const regionClause = region ? ` in ${region}` : "";
-  const prompt = `Generate ${count} realistic B2B leads for this niche: "${niche}"${regionClause}. Return a JSON array of ${count} lead objects.`;
-
-  const text = await callAI(system, prompt, true);
+  const text = await callGemini(system, `Generate ${count} B2B leads for this niche: "${niche}"${regionClause}.`, true);
   try {
-    const cleaned = text.replace(/```json|```/g, "").trim();
-    const arr = JSON.parse(cleaned) as RawLead[];
+    const arr = JSON.parse(text.replace(/```json|```/g, "").trim()) as RawLead[];
     if (Array.isArray(arr)) return arr.slice(0, count);
-  } catch {
-    // fallback: generate minimal leads
-  }
+  } catch { /* fallback */ }
   return [];
 }
 
-// ─── Email generation ────────────────────────────────────────────────────────
+// ─── Main campaign processor ─────────────────────────────────────────────
 
-async function generateOutreachEmail(
-  lead: RawLead,
-  offer: string,
-  price: number,
-  currency: string,
-  senderName: string,
-): Promise<{ subject: string; body: string }> {
-  const system = [
-    "You are an expert cold email copywriter.",
-    "Write short, human, personalized cold emails that get replies.",
-    "No buzzwords. No fluff. Be specific to their business pain.",
-    "Email must be under 150 words.",
-    "Include a clear single CTA — reply to this email.",
-    "Return JSON with keys: subject, body.",
-  ].join(" ");
-
-  const prompt = `Write a cold email to ${lead.name}, ${lead.title} at ${lead.company} (${lead.industry}, ${lead.region}).
-Their pain point: ${lead.painPoint}.
-Offer: ${offer} for ${currency} ${price}.
-Sender name: ${senderName}.
-Return JSON {subject, body}.`;
-
-  const text = await callAI(system, prompt, true);
-  try {
-    const cleaned = text.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(cleaned) as { subject?: string; body?: string };
-    if (parsed.subject && parsed.body) return { subject: parsed.subject, body: parsed.body };
-  } catch {
-    // fallback
-  }
-
-  return {
-    subject: `Quick question about ${lead.company}`,
-    body: `Hi ${lead.name.split(" ")[0]},\n\nI noticed ${lead.company} could benefit from ${offer}. We help ${lead.industry} businesses solve exactly this — typical results within 2 weeks.\n\nWould it make sense to connect? Happy to show you how it works in a quick reply.\n\n${senderName}`,
-  };
-}
-
-// ─── Follow-up generation ─────────────────────────────────────────────────
-
-async function generateFollowUpEmail(
-  lead: AutoCampaignStep,
-  offer: string,
-  senderName: string,
-): Promise<{ subject: string; body: string }> {
-  const system = [
-    "You are writing a short, friendly follow-up to a cold email that got no reply.",
-    "Keep it under 80 words. Be human, not pushy.",
-    "Reference the original offer briefly.",
-    "Return JSON with keys: subject, body.",
-  ].join(" ");
-
-  const prompt = `Write a follow-up email to ${lead.leadName} at ${lead.company}. Offer: ${offer}. Sender: ${senderName}. Return JSON {subject, body}.`;
-  const text = await callAI(system, prompt, true);
-  try {
-    const cleaned = text.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(cleaned) as { subject?: string; body?: string };
-    if (parsed.subject && parsed.body) return { subject: parsed.subject, body: parsed.body };
-  } catch { /* fallback */ }
-  return {
-    subject: `Re: ${offer}`,
-    body: `Hi ${lead.leadName.split(" ")[0]},\n\nJust circling back — wanted to make sure my last email didn't get buried.\n\nStill happy to help with ${offer}. Even a quick reply to let me know if it's relevant would be great.\n\n${senderName}`,
-  };
-}
-
-// ─── Reply classification ─────────────────────────────────────────────────
-
-async function classifyReply(replyText: string): Promise<"interested" | "not_interested" | "needs_more_info" | "unknown"> {
-  const system = `Classify this email reply as: "interested" (wants to proceed, asks about price, says yes), "not_interested" (no thanks, unsubscribe, not relevant), "needs_more_info" (has questions, wants to know more), or "unknown". Return ONLY one of those four words.`;
-  const text = await callAI(system, `Email reply: "${replyText.slice(0, 500)}"`, false);
-  const clean = text.trim().toLowerCase();
-  if (clean.includes("interested") && !clean.includes("not_interested")) return "interested";
-  if (clean.includes("not_interested") || clean.includes("not interested")) return "not_interested";
-  if (clean.includes("needs_more_info") || clean.includes("more info")) return "needs_more_info";
-  return "unknown";
-}
-
-async function generateInterestReply(
-  lead: AutoCampaignStep,
-  offer: string,
-  price: number,
-  currency: string,
-  paymentLink: string,
-  senderName: string,
-): Promise<{ subject: string; body: string }> {
-  const body = `Hi ${lead.leadName.split(" ")[0]},
-
-Great to hear from you! Here's everything you need to get started:
-
-Offer: ${offer}
-Investment: ${currency} ${price.toLocaleString()}
-Payment link: ${paymentLink}
-
-Once payment is confirmed I'll kick things off within 24 hours.
-
-Looking forward to working with you.
-
-${senderName}`;
-
-  return { subject: `Re: ${offer} — payment link`, body };
-}
-
-async function generateInfoReply(
-  lead: AutoCampaignStep,
-  offer: string,
-  price: number,
-  currency: string,
-  senderName: string,
-  replyText: string,
-): Promise<{ subject: string; body: string }> {
-  const system = [
-    "You are a helpful salesperson answering a prospect's questions via email.",
-    "Be concise, specific, and end with a clear next step.",
-    "Under 120 words.",
-    "Return JSON {subject, body}.",
-  ].join(" ");
-
-  const prompt = `The prospect ${lead.leadName} at ${lead.company} replied to your email about "${offer}" (${currency} ${price}). Their reply: "${replyText.slice(0, 300)}". Write a helpful, confident response that answers their question and moves toward a yes. Sender: ${senderName}. Return JSON {subject, body}.`;
-  const text = await callAI(system, prompt, true);
-  try {
-    const cleaned = text.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(cleaned) as { subject?: string; body?: string };
-    if (parsed.subject && parsed.body) return { subject: parsed.subject, body: parsed.body };
-  } catch { /* fallback */ }
-  return {
-    subject: `Re: ${offer}`,
-    body: `Hi ${lead.leadName.split(" ")[0]},\n\nThanks for getting back to me. Happy to answer any questions — ${offer} includes everything needed to get you results fast, for ${currency} ${price}. What else can I clarify for you?\n\n${senderName}`,
-  };
-}
-
-// ─── Core campaign processor ───────────────────────────────────────────────
-
-async function processCampaign(campaign: AutonomousCampaign, userId: string) {
+async function processCampaign(campaign: AutonomousCampaign): Promise<void> {
   const store = await readStore();
-  const account = store.emailAccounts.find((a) => a.id === campaign.emailAccountId && a.userId === userId);
+  const account = store.emailAccounts.find((a) => a.id === campaign.emailAccountId && a.userId === campaign.userId);
   if (!account) return;
 
-  const senderName = store.users.find((u) => u.id === userId)?.name ?? "The team";
+  const senderName = store.users.find((u) => u.id === campaign.userId)?.name ?? "Alex";
 
   // Phase 1: Generate leads if none yet
   if (campaign.steps.length === 0) {
     const rawLeads = await generateLeads(campaign.niche, campaign.targetCount, campaign.region);
-    if (rawLeads.length === 0) return;
+    if (!rawLeads.length) return;
 
     const steps: AutoCampaignStep[] = rawLeads.map((l) => ({
       leadId: createId("ALD"),
@@ -244,176 +277,212 @@ async function processCampaign(campaign: AutonomousCampaign, userId: string) {
       leadEmail: l.email,
       company: l.company,
       status: "pending",
+      conversationState: "pending",
+      conversationHistory: [],
       lastActionAt: new Date().toISOString(),
     }));
 
-    await updateStore((draft) => {
-      const c = draft.autonomousCampaigns.find((x) => x.id === campaign.id);
+    await updateStore((d) => {
+      const c = d.autonomousCampaigns.find((x) => x.id === campaign.id);
       if (c) { c.steps = steps; c.updatedAt = new Date().toISOString(); }
-      return draft;
+      return d;
     });
     campaign = (await readStore()).autonomousCampaigns.find((x) => x.id === campaign.id)!;
   }
 
-  // Phase 2: Send initial outreach to pending leads (batch 5 at a time per run)
-  const pending = campaign.steps.filter((s) => s.status === "pending").slice(0, 5);
-  for (const step of pending) {
+  // Phase 2: Send initial outreach — batch 5 per run
+  const pendingSteps = campaign.steps.filter((s) => s.conversationState === "pending").slice(0, 5);
+  for (const step of pendingSteps) {
     try {
-      const { subject, body } = await generateOutreachEmail(
-        { name: step.leadName, email: step.leadEmail, company: step.company, title: "Business Owner", industry: campaign.niche, region: campaign.region ?? "", painPoint: "" },
-        campaign.offer, campaign.price, campaign.currency, senderName,
-      );
-
-      await sendEmailWithAccount({
-        accountId: account.id,
-        to: step.leadEmail,
-        subject,
-        html: body.split("\n").map((l) => `<p>${l}</p>`).join(""),
-        text: body,
+      const { topNeed } = await detectBusinessNeeds({ company: step.company, industry: campaign.niche, niche: campaign.niche, region: campaign.region ?? "" });
+      const { subject, body } = await genOutreachEmail({
+        leadName: step.leadName, company: step.company, niche: campaign.niche,
+        offer: campaign.offer, senderName, hook: topNeed.hook.replace("[city]", campaign.region ?? "your city").replace("[food type]", campaign.niche).replace("[food]", campaign.niche).replace("[law type]", campaign.niche).replace("[area]", campaign.region ?? "your area"),
+        region: campaign.region ?? "",
       });
 
-      await updateStore((draft) => {
-        const c = draft.autonomousCampaigns.find((x) => x.id === campaign.id);
+      await sendEmailWithAccount({
+        accountId: account.id, to: step.leadEmail, subject,
+        html: body.split("\n").map((l) => `<p>${l}</p>`).join(""), text: body,
+      });
+
+      await updateStore((d) => {
+        const c = d.autonomousCampaigns.find((x) => x.id === campaign.id);
         const s = c?.steps.find((x) => x.leadId === step.leadId);
-        if (s) { s.status = "emailed"; s.lastActionAt = new Date().toISOString(); }
+        if (s) {
+          s.status = "emailed";
+          s.conversationState = "emailed";
+          s.conversationHistory = [{ role: "assistant", content: body, sentAt: new Date().toISOString() }];
+          s.lastActionAt = new Date().toISOString();
+        }
         if (c) { c.totalEmailed = (c.totalEmailed || 0) + 1; c.updatedAt = new Date().toISOString(); }
-        return draft;
-      });
-
-      await logActivityEvent({ userId, type: "outreach", title: `Auto-sent to ${step.leadName} at ${step.company}`, detail: subject, status: "done" });
-    } catch { /* skip failed send */ }
-  }
-
-  // Phase 3: Follow up on emailed leads with no reply after 3 days
-  const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
-  const coldLeads = campaign.steps.filter(
-    (s) => s.status === "emailed" && new Date(s.lastActionAt).getTime() < threeDaysAgo,
-  ).slice(0, 3);
-
-  for (const step of coldLeads) {
-    try {
-      const { subject, body } = await generateFollowUpEmail(step, campaign.offer, senderName);
-      await sendEmailWithAccount({
-        accountId: account.id,
-        to: step.leadEmail,
-        subject,
-        html: body.split("\n").map((l) => `<p>${l}</p>`).join(""),
-        text: body,
-      });
-      await updateStore((draft) => {
-        const c = draft.autonomousCampaigns.find((x) => x.id === campaign.id);
-        const s = c?.steps.find((x) => x.leadId === step.leadId);
-        if (s) { s.status = "followed_up"; s.lastActionAt = new Date().toISOString(); }
-        return draft;
+        return d;
       });
     } catch { /* skip */ }
   }
 
-  // Phase 4: Check inbox for replies from campaign leads and auto-respond
-  const emailedLeads = campaign.steps.filter((s) => ["emailed", "followed_up"].includes(s.status));
-  const inboxMessages = store.inbox.filter((msg) => {
-    const fromEmail = msg.from?.toLowerCase() ?? "";
-    return emailedLeads.some((l) => l.leadEmail.toLowerCase() === fromEmail || fromEmail.includes(l.company.toLowerCase().split(" ")[0]));
+  // Phase 3: Follow up on cold leads (no reply after 3 days, max 1 follow-up)
+  const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+  const coldSteps = campaign.steps.filter(
+    (s) => s.conversationState === "emailed" && !s.followedUp && new Date(s.lastActionAt).getTime() < threeDaysAgo,
+  ).slice(0, 3);
+
+  for (const step of coldSteps) {
+    try {
+      const daysSince = Math.round((Date.now() - new Date(step.lastActionAt).getTime()) / (24 * 60 * 60 * 1000));
+      const history = (step.conversationHistory ?? []).map((m) => `${m.role === "assistant" ? senderName : step.leadName}: ${m.content}`).join("\n\n");
+      const { subject, body } = await genFollowUpEmail({ leadName: step.leadName, company: step.company, offer: campaign.offer, senderName, conversationHistory: history, daysSinceLastContact: daysSince });
+
+      await sendEmailWithAccount({
+        accountId: account.id, to: step.leadEmail, subject,
+        html: body.split("\n").map((l) => `<p>${l}</p>`).join(""), text: body,
+      });
+
+      await updateStore((d) => {
+        const c = d.autonomousCampaigns.find((x) => x.id === campaign.id);
+        const s = c?.steps.find((x) => x.leadId === step.leadId);
+        if (s) {
+          s.followedUp = true;
+          s.conversationState = "followed_up";
+          s.conversationHistory = [...(s.conversationHistory ?? []), { role: "assistant", content: body, sentAt: new Date().toISOString() }];
+          s.lastActionAt = new Date().toISOString();
+        }
+        return d;
+      });
+    } catch { /* skip */ }
+  }
+
+  // Phase 4: Process inbox replies and have real conversations
+  const freshStore = await readStore();
+  const freshCampaign = freshStore.autonomousCampaigns.find((x) => x.id === campaign.id)!;
+  const activeSteps = freshCampaign.steps.filter((s) =>
+    ["emailed", "followed_up", "in_conversation", "offer_made"].includes(s.conversationState ?? ""),
+  );
+
+  const inboxMessages = freshStore.inbox.filter((msg) => {
+    const fromEmail = (msg.from ?? "").toLowerCase();
+    return activeSteps.some((l) =>
+      fromEmail.includes(l.leadEmail.toLowerCase().split("@")[0]) ||
+      l.leadEmail.toLowerCase() === fromEmail,
+    );
   });
 
   for (const msg of inboxMessages) {
-    const matchedStep = emailedLeads.find(
-      (l) => msg.from?.toLowerCase().includes(l.leadEmail.toLowerCase().split("@")[0]) ||
-             msg.from?.toLowerCase().includes(l.company.toLowerCase().split(" ")[0]),
+    const step = activeSteps.find((l) =>
+      (msg.from ?? "").toLowerCase().includes(l.leadEmail.toLowerCase().split("@")[0]) ||
+      l.leadEmail.toLowerCase() === (msg.from ?? "").toLowerCase(),
     );
-    if (!matchedStep || matchedStep.status === "replied" || matchedStep.status === "interested" || matchedStep.status === "payment_sent") continue;
+    if (!step) continue;
 
-    const classification = await classifyReply(msg.preview ?? msg.subject ?? "");
+    // Already handled this message?
+    const msgContent = msg.preview ?? msg.subject ?? "";
+    const alreadyHandled = (step.conversationHistory ?? []).some((h) => h.role === "user" && h.content.includes(msgContent.slice(0, 50)));
+    if (alreadyHandled) continue;
 
-    if (classification === "interested") {
+    // Wait for human-like delay before responding
+    if (!shouldRespondNow(step)) continue;
+
+    const intent = await classifyIntent(msgContent);
+
+    if (intent === "not_interested") {
+      await updateStore((d) => {
+        const c = d.autonomousCampaigns.find((x) => x.id === campaign.id);
+        const s = c?.steps.find((x) => x.leadId === step.leadId);
+        if (s) { s.conversationState = "declined"; s.status = "declined"; s.lastActionAt = new Date().toISOString(); }
+        return d;
+      });
+      continue;
+    }
+
+    // Notify owner if interested
+    if (["interested", "asking_price", "ready_to_pay", "wants_portfolio"].includes(intent)) {
+      await notifyInterestedReply({ clientName: step.leadName, clientEmail: step.leadEmail, company: step.company, replyText: msgContent }).catch(() => undefined);
+    }
+
+    let replyBody = "";
+    let replySubject = "";
+
+    if (intent === "ready_to_pay") {
+      // Only now do we create and send the payment link
       try {
         const payment = await autoCreateAndSendPayment({
-          userId,
-          emailAccountId: account.id,
-          clientName: matchedStep.leadName,
-          clientEmail: matchedStep.leadEmail,
-          description: campaign.offer,
-          amount: campaign.price,
-          currency: campaign.currency,
-          senderName,
+          userId: campaign.userId, emailAccountId: account.id,
+          clientName: step.leadName, clientEmail: step.leadEmail,
+          description: campaign.offer, amount: campaign.price, currency: campaign.currency, senderName,
         });
+        const { subject, body } = await genPaymentReadyReply({ leadName: step.leadName, company: step.company, offer: campaign.offer, senderName, price: campaign.price, currency: campaign.currency, paymentLink: payment.link });
+        replySubject = subject;
+        replyBody = body;
 
-        const { subject, body } = await generateInterestReply(
-          matchedStep, campaign.offer, campaign.price, campaign.currency, payment.link, senderName,
-        );
-        await sendEmailWithAccount({
-          accountId: account.id, to: matchedStep.leadEmail,
-          subject, html: body.split("\n").map((l) => `<p>${l}</p>`).join(""), text: body,
+        await updateStore((d) => {
+          const c = d.autonomousCampaigns.find((x) => x.id === campaign.id);
+          const s = c?.steps.find((x) => x.leadId === step.leadId);
+          if (s) { s.conversationState = "payment_requested"; s.status = "payment_sent"; s.paymentId = payment.id; }
+          return d;
         });
-
-        await updateStore((draft) => {
-          const c = draft.autonomousCampaigns.find((x) => x.id === campaign.id);
-          const s = c?.steps.find((x) => x.leadId === matchedStep.leadId);
-          if (s) { s.status = "payment_sent"; s.paymentId = payment.id; s.replyText = msg.preview; s.lastActionAt = new Date().toISOString(); }
-          if (c) { c.totalReplied = (c.totalReplied || 0) + 1; c.updatedAt = new Date().toISOString(); }
-          return draft;
-        });
-
-        await logActivityEvent({ userId, type: "payment", title: `Auto-payment sent to ${matchedStep.leadName}`, detail: `${campaign.currency} ${campaign.price} — ${campaign.offer}`, status: "done" });
+        await notifyPaymentLinkSent({ clientName: step.leadName, clientEmail: step.leadEmail, amount: campaign.price, currency: campaign.currency }).catch(() => undefined);
       } catch { /* skip */ }
-    } else if (classification === "needs_more_info") {
+    } else if (intent === "wants_portfolio") {
+      // Generate demo portfolio and send link
+      let portfolioUrl: string | undefined;
       try {
-        const { subject, body } = await generateInfoReply(
-          matchedStep, campaign.offer, campaign.price, campaign.currency, senderName, msg.preview ?? "",
-        );
-        await sendEmailWithAccount({
-          accountId: account.id, to: matchedStep.leadEmail,
-          subject, html: body.split("\n").map((l) => `<p>${l}</p>`).join(""), text: body,
-        });
-        await updateStore((draft) => {
-          const c = draft.autonomousCampaigns.find((x) => x.id === campaign.id);
-          const s = c?.steps.find((x) => x.leadId === matchedStep.leadId);
-          if (s) { s.status = "replied"; s.replyText = msg.preview; s.lastActionAt = new Date().toISOString(); }
-          if (c) { c.totalReplied = (c.totalReplied || 0) + 1; c.updatedAt = new Date().toISOString(); }
-          return draft;
-        });
+        const port = await generateAndSavePortfolio({ offer: campaign.offer, niche: campaign.niche, senderName, region: campaign.region ?? "" });
+        portfolioUrl = port.url;
       } catch { /* skip */ }
-    } else if (classification === "not_interested") {
-      await updateStore((draft) => {
-        const c = draft.autonomousCampaigns.find((x) => x.id === campaign.id);
-        const s = c?.steps.find((x) => x.leadId === matchedStep.leadId);
-        if (s) { s.status = "declined"; s.lastActionAt = new Date().toISOString(); }
-        return draft;
-      });
+
+      const history = (step.conversationHistory ?? []).map((m) => `${m.role === "assistant" ? senderName : step.leadName}: ${m.content}`).join("\n\n");
+      const { subject, body } = await genConversationReply({ leadName: step.leadName, company: step.company, niche: campaign.niche, offer: campaign.offer, senderName, price: campaign.price, currency: campaign.currency, conversationHistory: history, latestReply: msgContent, intent, portfolioUrl });
+      replySubject = subject;
+      replyBody = body;
+    } else {
+      // Natural conversation reply
+      const history = (step.conversationHistory ?? []).map((m) => `${m.role === "assistant" ? senderName : step.leadName}: ${m.content}`).join("\n\n");
+      const { subject, body } = await genConversationReply({ leadName: step.leadName, company: step.company, niche: campaign.niche, offer: campaign.offer, senderName, price: campaign.price, currency: campaign.currency, conversationHistory: history, latestReply: msgContent, intent });
+      replySubject = subject;
+      replyBody = body;
     }
-  }
 
-  // Check if campaign is complete (all leads processed)
-  const freshStore = await readStore();
-  const freshCampaign = freshStore.autonomousCampaigns.find((x) => x.id === campaign.id);
-  if (!freshCampaign) return;
+    if (replyBody) {
+      try {
+        await sendEmailWithAccount({
+          accountId: account.id, to: step.leadEmail, subject: replySubject,
+          html: replyBody.split("\n").map((l) => `<p>${l}</p>`).join(""), text: replyBody,
+        });
 
-  const allDone = freshCampaign.steps.every((s) =>
-    ["payment_sent", "paid", "declined", "followed_up"].includes(s.status),
-  );
-  const allEmailed = freshCampaign.steps.every((s) => s.status !== "pending");
+        await updateStore((d) => {
+          const c = d.autonomousCampaigns.find((x) => x.id === campaign.id);
+          const s = c?.steps.find((x) => x.leadId === step.leadId);
+          if (s) {
+            const prevState = s.conversationState;
+            if (!["payment_requested", "declined"].includes(s.conversationState ?? "")) {
+              s.conversationState = intent === "asking_price" || intent === "wants_portfolio" ? "offer_made" : "in_conversation";
+              s.status = "replied";
+            }
+            s.conversationHistory = [
+              ...(s.conversationHistory ?? []),
+              { role: "user", content: msgContent, sentAt: new Date().toISOString() },
+              { role: "assistant", content: replyBody, sentAt: new Date().toISOString() },
+            ];
+            s.lastActionAt = new Date().toISOString();
+            setNextResponseTime(s); // Set next human-like delay
+          }
+          if (c && !["payment_requested", "declined"].includes(freshCampaign.steps.find((x) => x.leadId === step.leadId)?.conversationState ?? "")) {
+            c.totalReplied = (c.totalReplied || 0) + 1;
+          }
+          return d;
+        });
 
-  if (allDone && allEmailed) {
-    await updateStore((draft) => {
-      const c = draft.autonomousCampaigns.find((x) => x.id === campaign.id);
-      if (c) { c.status = "completed"; c.completedAt = new Date().toISOString(); c.updatedAt = new Date().toISOString(); }
-      return draft;
-    });
+        await logActivityEvent({ userId: campaign.userId, type: "outreach", title: `Auto-reply to ${step.leadName} (${intent})`, detail: `${step.company} — ${replySubject}`, status: "done" });
+      } catch { /* skip */ }
+    }
   }
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────
+// ─── Public API ──────────────────────────────────────────────────────────
 
 export async function launchAutonomousCampaign(params: {
-  userId: string;
-  name: string;
-  niche: string;
-  offer: string;
-  price: number;
-  currency: string;
-  targetCount: number;
-  region?: string;
-  emailAccountId: string;
+  userId: string; name: string; niche: string; offer: string;
+  price: number; currency: string; targetCount: number; region?: string; emailAccountId: string;
 }): Promise<AutonomousCampaign> {
   const campaign: AutonomousCampaign = {
     id: createId("AUTO"),
@@ -436,20 +505,13 @@ export async function launchAutonomousCampaign(params: {
     totalRevenue: 0,
   };
 
-  await updateStore((draft) => {
-    if (!draft.autonomousCampaigns) draft.autonomousCampaigns = [];
-    draft.autonomousCampaigns.unshift(campaign);
-    return draft;
+  await updateStore((d) => {
+    if (!d.autonomousCampaigns) d.autonomousCampaigns = [];
+    d.autonomousCampaigns.unshift(campaign);
+    return d;
   });
 
-  await logActivityEvent({
-    userId: params.userId,
-    type: "campaign",
-    title: `Launched autonomous campaign: ${params.name}`,
-    detail: `Finding ${params.targetCount} ${params.niche} leads and pitching ${params.offer} at ${params.currency} ${params.price}`,
-    status: "done",
-  });
-
+  await logActivityEvent({ userId: params.userId, type: "campaign", title: `Autonomous campaign launched: ${params.name}`, detail: `${params.targetCount} ${params.niche} leads → ${params.offer} @ ${params.currency} ${params.price}`, status: "done" });
   return campaign;
 }
 
@@ -457,6 +519,6 @@ export async function runAutonomousCampaigns(): Promise<void> {
   const store = await readStore();
   const running = (store.autonomousCampaigns ?? []).filter((c) => c.status === "running");
   for (const campaign of running) {
-    await processCampaign(campaign, campaign.userId).catch(() => undefined);
+    await processCampaign(campaign).catch(() => undefined);
   }
 }

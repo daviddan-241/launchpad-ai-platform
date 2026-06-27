@@ -218,6 +218,7 @@ export type AppStore = {
   deals: Deal[];
   deliveryProjects: DeliveryProject[];
   autonomousCampaigns: AutonomousCampaign[];
+  portfolios: Array<{ id: string; html: string; createdAt: string }>;
 };
 
 
@@ -233,6 +234,10 @@ export type AutoCampaignStep = {
   replyText?: string;
   paymentId?: string;
   lastActionAt: string;
+  conversationState?: string;
+  conversationHistory?: Array<{ role: 'assistant' | 'user'; content: string; sentAt: string }>;
+  nextResponseAt?: string;
+  followedUp?: boolean;
 };
 
 export type AutoCampaignStatus = "running" | "paused" | "completed" | "failed";
@@ -279,6 +284,7 @@ function seedStore(): AppStore {
     deals: [],
     deliveryProjects: [],
     autonomousCampaigns: [],
+    portfolios: [],
   };
 }
 
@@ -306,6 +312,7 @@ async function ensureStore() {
       deals: Array.isArray(parsed.deals) ? parsed.deals : [],
       deliveryProjects: Array.isArray(parsed.deliveryProjects) ? parsed.deliveryProjects : [],
       autonomousCampaigns: Array.isArray(parsed.autonomousCampaigns) ? parsed.autonomousCampaigns : [],
+      portfolios: Array.isArray(parsed.portfolios) ? parsed.portfolios : [],
     };
 
     await fs.writeFile(dataPath, JSON.stringify(hydrated, null, 2));
