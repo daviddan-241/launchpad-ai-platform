@@ -1,0 +1,50 @@
+2026-06-27T18:23:59.865079471Z #14 0.957 ▲ Next.js 16.2.9 (Turbopack)
+2026-06-27T18:23:59.865083451Z #14 0.957 - Experiments (use with caution):
+2026-06-27T18:23:59.865087261Z #14 0.957   ? instrumentationHook (invalid experimental key)
+2026-06-27T18:23:59.865091201Z #14 0.957 
+2026-06-27T18:23:59.865095141Z #14 0.994   Creating an optimized production build ...
+2026-06-27T18:24:06.973800829Z #14 8.253 ✓ Compiled successfully in 7.0s
+2026-06-27T18:24:07.175398599Z #14 8.305   Running TypeScript ...
+2026-06-27T18:24:15.361566477Z #14 16.64 Failed to type check.
+2026-06-27T18:24:15.362105349Z #14 16.64 
+2026-06-27T18:24:15.519606264Z #14 16.64 Type error: Type 'typeof import("/app/src/app/api/portfolio/[id]/route")' does not satisfy the constraint 'RouteHandlerConfig<"/api/portfolio/[id]">'.
+2026-06-27T18:24:15.519628125Z #14 16.64   Types of property 'GET' are incompatible.
+2026-06-27T18:24:15.519632455Z #14 16.64     Type '(_req: NextRequest, { params }: { params: { id: string; }; }) => Promise<NextResponse<unknown>>' is not assignable to type '(request: NextRequest, context: { params: Promise<{ id: string; }>; }) => void | Response | Promise<void | Response>'.
+2026-06-27T18:24:15.519636265Z #14 16.64       Types of parameters '__1' and 'context' are incompatible.
+2026-06-27T18:24:15.519650835Z #14 16.64         Type '{ params: Promise<{ id: string; }>; }' is not assignable to type '{ params: { id: string; }; }'.
+2026-06-27T18:24:15.519652945Z #14 16.64           Types of property 'params' are incompatible.
+2026-06-27T18:24:15.519655195Z #14 16.64             Property 'id' is missing in type 'Promise<{ id: string; }>' but required in type '{ id: string; }'.
+2026-06-27T18:24:15.519657135Z #14 16.64 
+2026-06-27T18:24:15.519659165Z #14 16.72 Next.js build worker exited with code: 1 and signal: null
+2026-06-27T18:24:15.519661675Z #14 16.80 npm notice
+2026-06-27T18:24:15.519663685Z #14 16.80 npm notice New major version of npm available! 10.8.2 -> 11.17.0
+2026-06-27T18:24:15.519665645Z #14 16.80 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.17.0
+2026-06-27T18:24:15.519667596Z #14 16.80 npm notice To update run: npm install -g npm@11.17.0
+2026-06-27T18:24:15.519669876Z #14 16.80 npm notice
+2026-06-27T18:24:15.574350452Z #14 ERROR: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+2026-06-27T18:24:15.574369562Z ------
+2026-06-27T18:24:15.574374272Z  > importing cache manifest
+2026-06-27T18:24:15.574377512Z ------
+2026-06-27T18:24:15.574380912Z ------
+2026-06-27T18:24:15.574384712Z  > [builder 3/3] RUN npm run build:
+2026-06-27T18:24:15.574388302Z 16.64         Type '{ params: Promise<{ id: string; }>; }' is not assignable to type '{ params: { id: string; }; }'.
+2026-06-27T18:24:15.574391922Z 16.64           Types of property 'params' are incompatible.
+2026-06-27T18:24:15.574395042Z 16.64             Property 'id' is missing in type 'Promise<{ id: string; }>' but required in type '{ id: string; }'.
+2026-06-27T18:24:15.574398142Z 16.64 
+2026-06-27T18:24:15.574401163Z 16.72 Next.js build worker exited with code: 1 and signal: null
+2026-06-27T18:24:15.574404193Z 16.80 npm notice
+2026-06-27T18:24:15.574445614Z 16.80 npm notice New major version of npm available! 10.8.2 -> 11.17.0
+2026-06-27T18:24:15.574453424Z 16.80 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.17.0
+2026-06-27T18:24:15.574457694Z 16.80 npm notice To update run: npm install -g npm@11.17.0
+2026-06-27T18:24:15.574462214Z 16.80 npm notice
+2026-06-27T18:24:15.574467434Z ------
+2026-06-27T18:24:15.575121789Z Dockerfile:12
+2026-06-27T18:24:15.575135519Z --------------------
+2026-06-27T18:24:15.575140569Z   10 |     COPY --from=deps /app/node_modules ./node_modules
+2026-06-27T18:24:15.575144609Z   11 |     COPY . .
+2026-06-27T18:24:15.575148789Z   12 | >>> RUN npm run build
+2026-06-27T18:24:15.575152529Z   13 |     
+2026-06-27T18:24:15.575156289Z   14 |     FROM base AS runner
+2026-06-27T18:24:15.575160009Z --------------------
+2026-06-27T18:24:15.575164059Z error: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+2026-06-27T18:24:15.600114865Z error: exit status 1
