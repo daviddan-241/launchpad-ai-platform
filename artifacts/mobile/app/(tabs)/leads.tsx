@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
 import React, { useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -21,11 +22,11 @@ import { useColors } from "@/hooks/useColors";
 
 const STAGES: LeadStage[] = ["New", "Researching", "Contacted", "Meeting", "Qualified"];
 const STAGE_COLORS: Record<LeadStage, string> = {
-  New: "#8b7a9e",
-  Researching: "#60a5fa",
-  Contacted: "#f59e0b",
-  Meeting: "#d946ef",
-  Qualified: "#10b981",
+  New: "#6b7280",
+  Researching: "#3b82f6",
+  Contacted: "#d97706",
+  Meeting: "#9333ea",
+  Qualified: "#059669",
 };
 
 function ScoreBadge({ label, value, color }: { label: string; value: number; color: string }) {
@@ -130,6 +131,7 @@ function AddLeadModal({ visible, onClose, onSave, colors }: {
 export default function LeadsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { leads, addLead, updateLead, deleteLead } = useApp();
   const [search, setSearch] = useState("");
   const [addVisible, setAddVisible] = useState(false);
@@ -224,39 +226,42 @@ export default function LeadsScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <View style={[styles.leadCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Pressable
+            style={[styles.leadCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/lead/${item.id}`); }}
+          >
             <View style={styles.cardTop}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.leadName, { color: colors.foreground }]}>{item.name}</Text>
                 <Text style={[styles.leadSub, { color: colors.mutedForeground }]}>{item.title} · {item.company}</Text>
               </View>
-              <Pressable onPress={() => handleDelete(item.id)} hitSlop={8}>
-                <Feather name="trash-2" size={16} color={colors.mutedForeground} />
-              </Pressable>
+              <View style={styles.cardChevron}>
+                <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+              </View>
             </View>
             <View style={styles.cardMid}>
               <ScoreBadge label="Fit" value={item.fitScore} color={colors.primary} />
               <ScoreBadge label="Intent" value={item.intentScore} color={colors.accent} />
-              <View style={[styles.stagePill, { backgroundColor: STAGE_COLORS[item.stage] + "22" }]}>
+              <View style={[styles.stagePill, { backgroundColor: STAGE_COLORS[item.stage] + "18" }]}>
                 <Text style={[styles.stagePillText, { color: STAGE_COLORS[item.stage] }]}>{item.stage}</Text>
               </View>
             </View>
             {item.recentSignal ? (
               <Text style={[styles.signal, { color: colors.mutedForeground }]} numberOfLines={1}>
-                📡 {item.recentSignal}
+                {item.recentSignal}
               </Text>
             ) : null}
             <View style={styles.cardActions}>
               <Pressable
                 style={[styles.actionBtn, { borderColor: colors.border }]}
-                onPress={() => advanceStage(item)}
+                onPress={(e) => { e.stopPropagation?.(); advanceStage(item); }}
               >
                 <Feather name="arrow-right" size={13} color={colors.primary} />
                 <Text style={[styles.actionText, { color: colors.primary }]}>Advance stage</Text>
               </Pressable>
               <Text style={[styles.touched, { color: colors.mutedForeground }]}>{item.lastTouched}</Text>
             </View>
-          </View>
+          </Pressable>
         )}
       />
 
@@ -288,6 +293,7 @@ const styles = StyleSheet.create({
   list: { padding: 16, paddingTop: 8, gap: 10 },
   leadCard: { borderRadius: 18, borderWidth: 1, padding: 14, gap: 10 },
   cardTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  cardChevron: { paddingTop: 2 },
   leadName: { fontSize: 15, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   leadSub: { fontSize: 12, marginTop: 2 },
   cardMid: { flexDirection: "row", gap: 6, flexWrap: "wrap" },
