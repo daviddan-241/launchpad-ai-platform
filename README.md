@@ -1,120 +1,125 @@
 # LeadForge
 
-LeadForge is an original mobile-first revenue workspace with chat-driven lead operations, outreach, CRM, payment approvals, project generation, and activity tracking.
+Mobile-first autonomous revenue workspace — AI chat, leads CRM, outreach, deals pipeline, payment requests, and delivery tracking. Deploy to Render in minutes.
 
-## Current real features
+## What's real
 
-- Custom LeadForge branding
-  - custom icon
-  - custom wordmark
-  - PWA home-screen icon support
-- Mobile-first iOS-style workspace shell with sidebar navigation
-- PWA manifest + offline shell page
-- Free signup and login flow
-- Cookie-based sessions
-- Local or mounted file persistence
-- Chat-first command page (`/chat`) that can:
-  - search saved leads
-  - build campaign plans
-  - generate proposals with saved pricing guidance
-  - generate MVP web project starter files
-  - prepare outreach drafts
-  - create payment drafts
-  - create deals and delivery handoffs from commands
-  - queue real sends to saved leads when a sender account is connected
-- Real-time-style activity dashboard (`/activity`)
-- Pricing/payment preference settings used by Dave in proposals and outreach
-- SMTP sender support with username/password
-- Gemini support with Groq/Ollama fallback
-- CRM deals pipeline (`/deals`)
-- Delivery projects + milestones (`/delivery`)
-- Payment request pipeline (`/payments`)
-- Render + Docker deployment prep
+- **AI Chat** — type commands to search leads, build campaigns, draft outreach emails, create payment links, and manage deals. Powered by Gemini (free) → Groq (free fallback) → Ollama (self-hosted fallback).
+- **Real email sending** — connects to Gmail, Outlook, or any SMTP server. Outreach jobs queue and send automatically every minute.
+- **Flutterwave payments** — generates real payment links, handles webhook on completion, auto-emails receipt to the client.
+- **IMAP inbox** — polls your inbox every 5 minutes for replies to outreach.
+- **PWA home screen** — install on iOS/Android home screen. Works offline.
+- **Auto keep-alive** — pings itself every 14 minutes so Render free tier never sleeps.
+- **Scheduler cron** — Render runs the outreach + payment worker every minute automatically.
 
-## Main app routes
+---
 
-- `/signup`
-- `/login`
-- `/chat`
-- `/activity`
-- `/projects`
-- `/dashboard`
-- `/leads`
-- `/deals`
-- `/campaigns`
-- `/payments`
-- `/delivery`
-- `/inbox`
-- `/workflows`
-- `/settings`
-- `/offline`
+## Deploy to Render (step by step)
 
-## SMTP-first Render setup
+### 1. Create a Render account
 
-If you do not want OAuth client credentials, use SMTP.
+Go to [render.com](https://render.com) and sign up (free).
 
-### Core Render environment variables
+### 2. Connect your GitHub repo
+
+- Dashboard → **New +** → **Web Service**
+- Choose **Connect a GitHub repository**
+- Select `daviddan-241/launchpad-ai-platform`
+- Render will detect the `Dockerfile` and `render.yaml` automatically
+
+### 3. Set environment variables
+
+In the Render service settings → **Environment**, add these:
+
+| Variable | Value | Where to get it |
+|---|---|---|
+| `APP_URL` | `https://your-app-name.onrender.com` | Your Render service URL |
+| `GEMINI_API_KEY` | your key | [aistudio.google.com](https://aistudio.google.com/app/apikey) — free |
+| `GROQ_API_KEY` | your key | [console.groq.com](https://console.groq.com) — free |
+| `FLUTTERWAVE_SECRET_KEY` | your key | [dashboard.flutterwave.com](https://dashboard.flutterwave.com/settings/apis) |
+| `SESSION_SECRET` | (auto-generated) | Render generates this |
+| `APP_ENCRYPTION_KEY` | (auto-generated) | Render generates this |
+
+> **Email setup** — no env vars needed. After deploy, go to **Settings → Email** inside the app and add your Gmail app password or SMTP credentials.
+
+### 4. Deploy
+
+Click **Create Web Service**. Render builds the Docker image and deploys. First deploy takes ~5 minutes.
+
+Your app will be live at: `https://your-app-name.onrender.com`
+
+---
+
+## Set up UptimeRobot (free auto-ping)
+
+UptimeRobot pings your app every 5 minutes and keeps Render's free tier alive. The app also pings itself every 14 minutes as a backup.
+
+1. Go to [uptimerobot.com](https://uptimerobot.com) and create a free account
+2. Click **Add New Monitor**
+3. Set:
+   - **Monitor Type**: HTTP(s)
+   - **Friendly Name**: LeadForge
+   - **URL**: `https://your-app-name.onrender.com/api/ping`
+   - **Monitoring Interval**: 5 minutes
+4. Click **Create Monitor**
+
+That's it. UptimeRobot pings `/api/ping` every 5 minutes. The endpoint returns `{"ok":true}` instantly with no auth required.
+
+---
+
+## Set up real email sending (inside the app)
+
+1. Open your app → **Settings** → **Email**
+2. Add your SMTP credentials:
+   - **Gmail**: use your Gmail address + an [App Password](https://myaccount.google.com/apppasswords) (requires 2FA enabled)
+   - **Outlook**: use your Microsoft email + password
+   - **Any SMTP**: host, port, username, password
+3. Save. Your email account is now connected and outreach will send from it.
+
+---
+
+## Set up payments (Flutterwave)
+
+1. Create a free account at [flutterwave.com](https://flutterwave.com)
+2. Get your **Secret Key** from Dashboard → Settings → API Keys
+3. Add it as `FLUTTERWAVE_SECRET_KEY` in Render environment
+4. Set webhook URL in Flutterwave dashboard:
+   `https://your-app-name.onrender.com/api/payments/webhook`
+5. Set `FLUTTERWAVE_WEBHOOK_HASH` to match the hash you set in Flutterwave
+
+---
+
+## Install on iPhone home screen (PWA)
+
+1. Open your app URL in **Safari** on iPhone
+2. Tap the **Share** button (box with arrow)
+3. Tap **Add to Home Screen**
+4. Tap **Add**
+
+LeadForge icon will appear on your home screen. It opens full-screen like a native app with no browser chrome.
+
+---
+
+## Local development
 
 ```bash
-APP_URL=
-APP_ENCRYPTION_KEY=
-DATA_DIR=/var/data/leadforge
-GEMINI_API_KEY=
-GEMINI_MODEL=gemini-1.5-flash
-FLUTTERWAVE_SECRET_KEY=
-```
-
-### Optional fallbacks
-
-```bash
-GROQ_API_KEY=
-GROQ_MODEL=llama-3.1-8b-instant
-OLLAMA_BASE_URL=
-OLLAMA_MODEL=llama3.2:1b
-```
-
-### Optional OAuth envs
-Only needed if you deliberately choose Gmail or Outlook API mode instead of SMTP.
-
-```bash
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-MICROSOFT_CLIENT_ID=
-MICROSOFT_CLIENT_SECRET=
-```
-
-## SMTP connection flow
-
-Inside `/settings`:
-- enter sender email
-- SMTP username
-- SMTP password or app password
-- SMTP host
-- SMTP port
-- secure on/off
-
-This is the primary real sending path if you do not want OAuth client IDs.
-
-## Run locally
-
-```bash
+cd leadforge
+cp .env.example .env.local
+# Fill in your keys in .env.local
 npm install
 npm run dev
 ```
 
-Or use:
+App runs at `http://localhost:3000`.
 
-```bash
-./scripts/leadforge-shell.sh dev
-```
+---
 
-## Deployment
+## Architecture
 
-- `Dockerfile` included
-- `render.yaml` included
-- `output: "standalone"` enabled in Next config
-- local persistence can be redirected using `DATA_DIR`
+- **Next.js 16** (App Router, standalone Docker output)
+- **File-based JSON store** at `DATA_DIR/app-data.json` (Render mounts a 1GB disk)
+- **Workers** bootstrap at server start via `instrumentation.ts` — no separate worker process
+- **Scheduler cron** — Render calls `GET /api/scheduler/tick?secret=SCHEDULER_SECRET` every minute
+- **AI fallback chain**: Gemini → Groq → Ollama
 
-## Important note
-
-This build is intentionally original in branding, content, and implementation. It follows the requested feature direction but does not copy protected branding or assets from other products.
+No database needed. No Redis. No separate worker. One Docker container does everything.
