@@ -1,0 +1,1142 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: LaunchPad - AI Sales & Lead Generation Platform API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: leads
+    description: Lead management and discovery
+  - name: chat
+    description: AI chat assistant
+  - name: campaigns
+    description: Email outreach campaigns
+  - name: projects
+    description: MVP project generation
+  - name: dashboard
+    description: Dashboard stats and activity
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # ── DASHBOARD ──────────────────────────────────────────────────────────────
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get dashboard overview stats
+      responses:
+        "200":
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /dashboard/activity:
+    get:
+      operationId: getRecentActivity
+      tags: [dashboard]
+      summary: Get recent activity feed
+      responses:
+        "200":
+          description: Recent activity list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  # ── LEADS ──────────────────────────────────────────────────────────────────
+  /leads:
+    get:
+      operationId: getLeads
+      tags: [leads]
+      summary: List all leads
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: industry
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: search
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: limit
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: offset
+          in: query
+          schema:
+            type: ["integer", "null"]
+      responses:
+        "200":
+          description: List of leads
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadListResponse"
+    post:
+      operationId: createLead
+      tags: [leads]
+      summary: Create a new lead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+
+  /leads/discover:
+    post:
+      operationId: discoverLeads
+      tags: [leads]
+      summary: Auto-discover leads using free APIs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadDiscoverInput"
+      responses:
+        "200":
+          description: Discovered leads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lead"
+
+  /leads/stats:
+    get:
+      operationId: getLeadStats
+      tags: [leads]
+      summary: Get lead pipeline stats
+      responses:
+        "200":
+          description: Lead statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadStats"
+
+  /leads/{id}:
+    get:
+      operationId: getLead
+      tags: [leads]
+      summary: Get a single lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lead details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+    patch:
+      operationId: updateLead
+      tags: [leads]
+      summary: Update a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadUpdate"
+      responses:
+        "200":
+          description: Updated lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+    delete:
+      operationId: deleteLead
+      tags: [leads]
+      summary: Delete a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── AI CHAT ────────────────────────────────────────────────────────────────
+  /chat/sessions:
+    get:
+      operationId: getChatSessions
+      tags: [chat]
+      summary: List chat sessions
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatSession"
+    post:
+      operationId: createChatSession
+      tags: [chat]
+      summary: Create a new chat session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatSessionInput"
+      responses:
+        "201":
+          description: Created session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatSession"
+
+  /chat/sessions/{id}:
+    get:
+      operationId: getChatSession
+      tags: [chat]
+      summary: Get session with messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Session with messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatSessionDetail"
+    delete:
+      operationId: deleteChatSession
+      tags: [chat]
+      summary: Delete a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /chat/sessions/{id}/messages:
+    post:
+      operationId: sendChatMessage
+      tags: [chat]
+      summary: Send a message and get AI response
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatMessageInput"
+      responses:
+        "200":
+          description: AI response message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatMessage"
+
+  # ── EMAIL CAMPAIGNS ────────────────────────────────────────────────────────
+  /campaigns:
+    get:
+      operationId: getCampaigns
+      tags: [campaigns]
+      summary: List all campaigns
+      responses:
+        "200":
+          description: List of campaigns
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Campaign"
+    post:
+      operationId: createCampaign
+      tags: [campaigns]
+      summary: Create a new email campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+
+  /campaigns/{id}:
+    get:
+      operationId: getCampaign
+      tags: [campaigns]
+      summary: Get a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Campaign details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+    patch:
+      operationId: updateCampaign
+      tags: [campaigns]
+      summary: Update a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+    delete:
+      operationId: deleteCampaign
+      tags: [campaigns]
+      summary: Delete a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /campaigns/{id}/send:
+    post:
+      operationId: sendCampaign
+      tags: [campaigns]
+      summary: Send campaign emails via connected account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Send result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignSendResult"
+
+  /campaigns/{id}/ai-generate:
+    post:
+      operationId: generateCampaignCopy
+      tags: [campaigns]
+      summary: AI-generate email copy for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignCopyRequest"
+      responses:
+        "200":
+          description: Generated copy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignCopyResult"
+
+  /campaigns/stats:
+    get:
+      operationId: getCampaignStats
+      tags: [campaigns]
+      summary: Get aggregate campaign stats
+      responses:
+        "200":
+          description: Campaign stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignStats"
+
+  # ── EMAIL ACCOUNTS ─────────────────────────────────────────────────────────
+  /email-accounts:
+    get:
+      operationId: getEmailAccounts
+      tags: [campaigns]
+      summary: List connected email accounts
+      responses:
+        "200":
+          description: Email accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmailAccount"
+    post:
+      operationId: connectEmailAccount
+      tags: [campaigns]
+      summary: Connect a Gmail/SMTP email account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailAccountInput"
+      responses:
+        "201":
+          description: Connected account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailAccount"
+
+  /email-accounts/{id}:
+    delete:
+      operationId: disconnectEmailAccount
+      tags: [campaigns]
+      summary: Disconnect an email account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Disconnected
+
+  # ── MVP PROJECTS ───────────────────────────────────────────────────────────
+  /projects:
+    get:
+      operationId: getProjects
+      tags: [projects]
+      summary: List all generated projects
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Generate a new MVP project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInput"
+      responses:
+        "201":
+          description: Generated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{id}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+    patch:
+      operationId: updateProject
+      tags: [projects]
+      summary: Update a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+    delete:
+      operationId: deleteProject
+      tags: [projects]
+      summary: Delete a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{id}/generate:
+    post:
+      operationId: generateProjectCode
+      tags: [projects]
+      summary: AI-generate full project code and proposal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Generated result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectGenerateResult"
+
+  /projects/{id}/push-github:
+    post:
+      operationId: pushProjectToGithub
+      tags: [projects]
+      summary: Push project code to GitHub
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: GitHub push result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GithubPushResult"
+
+  /projects/{id}/proposal:
+    get:
+      operationId: getProjectProposal
+      tags: [projects]
+      summary: Get the generated proposal for a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Project proposal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectProposal"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    # ── DASHBOARD ────────────────────────────────────────────────────────────
+    DashboardStats:
+      type: object
+      required: [totalLeads, hotLeads, campaignsSent, openRate, projectsGenerated, revenueEstimate]
+      properties:
+        totalLeads:
+          type: integer
+        hotLeads:
+          type: integer
+        campaignsSent:
+          type: integer
+        openRate:
+          type: number
+        projectsGenerated:
+          type: integer
+        revenueEstimate:
+          type: number
+        leadsByStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusCount"
+        leadsByIndustry:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusCount"
+
+    StatusCount:
+      type: object
+      required: [label, count]
+      properties:
+        label:
+          type: string
+        count:
+          type: integer
+
+    ActivityItem:
+      type: object
+      required: [id, type, description, createdAt]
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+
+    # ── LEADS ────────────────────────────────────────────────────────────────
+    Lead:
+      type: object
+      required: [id, companyName, status, createdAt]
+      properties:
+        id:
+          type: integer
+        companyName:
+          type: string
+        contactName:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        website:
+          type: ["string", "null"]
+        industry:
+          type: ["string", "null"]
+        location:
+          type: ["string", "null"]
+        status:
+          type: string
+        score:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+        linkedinUrl:
+          type: ["string", "null"]
+        whatsappNumber:
+          type: ["string", "null"]
+        source:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: ["string", "null"]
+
+    LeadListResponse:
+      type: object
+      required: [leads, total]
+      properties:
+        leads:
+          type: array
+          items:
+            $ref: "#/components/schemas/Lead"
+        total:
+          type: integer
+
+    LeadInput:
+      type: object
+      required: [companyName]
+      properties:
+        companyName:
+          type: string
+        contactName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        website:
+          type: string
+        industry:
+          type: string
+        location:
+          type: string
+        status:
+          type: string
+        score:
+          type: integer
+        notes:
+          type: string
+        linkedinUrl:
+          type: string
+        whatsappNumber:
+          type: string
+        source:
+          type: string
+
+    LeadUpdate:
+      type: object
+      properties:
+        companyName:
+          type: string
+        contactName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        website:
+          type: string
+        industry:
+          type: string
+        location:
+          type: string
+        status:
+          type: string
+        score:
+          type: integer
+        notes:
+          type: string
+        linkedinUrl:
+          type: string
+        whatsappNumber:
+          type: string
+
+    LeadDiscoverInput:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+        industry:
+          type: string
+        location:
+          type: string
+        limit:
+          type: integer
+
+    LeadStats:
+      type: object
+      required: [total, byStatus]
+      properties:
+        total:
+          type: integer
+        byStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusCount"
+        byIndustry:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusCount"
+        avgScore:
+          type: number
+
+    # ── CHAT ─────────────────────────────────────────────────────────────────
+    ChatSession:
+      type: object
+      required: [id, title, createdAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        messageCount:
+          type: integer
+        createdAt:
+          type: string
+        updatedAt:
+          type: ["string", "null"]
+
+    ChatSessionInput:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+
+    ChatSessionDetail:
+      type: object
+      required: [id, title, messages, createdAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        createdAt:
+          type: string
+
+    ChatMessage:
+      type: object
+      required: [id, sessionId, role, content, createdAt]
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        role:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+
+    ChatMessageInput:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+
+    # ── CAMPAIGNS ────────────────────────────────────────────────────────────
+    Campaign:
+      type: object
+      required: [id, name, status, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        subject:
+          type: ["string", "null"]
+        body:
+          type: ["string", "null"]
+        status:
+          type: string
+        recipientCount:
+          type: integer
+        sentCount:
+          type: integer
+        openCount:
+          type: integer
+        replyCount:
+          type: integer
+        emailAccountId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        scheduledAt:
+          type: ["string", "null"]
+
+    CampaignInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        emailAccountId:
+          type: integer
+        scheduledAt:
+          type: string
+
+    CampaignUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        status:
+          type: string
+        emailAccountId:
+          type: integer
+        scheduledAt:
+          type: string
+
+    CampaignSendResult:
+      type: object
+      required: [sent, failed, message]
+      properties:
+        sent:
+          type: integer
+        failed:
+          type: integer
+        message:
+          type: string
+
+    CampaignCopyRequest:
+      type: object
+      required: [tone, goal]
+      properties:
+        tone:
+          type: string
+        goal:
+          type: string
+        targetIndustry:
+          type: string
+
+    CampaignCopyResult:
+      type: object
+      required: [subject, body]
+      properties:
+        subject:
+          type: string
+        body:
+          type: string
+
+    CampaignStats:
+      type: object
+      required: [totalCampaigns, totalSent, avgOpenRate, avgReplyRate]
+      properties:
+        totalCampaigns:
+          type: integer
+        totalSent:
+          type: integer
+        avgOpenRate:
+          type: number
+        avgReplyRate:
+          type: number
+
+    EmailAccount:
+      type: object
+      required: [id, email, provider, createdAt]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        provider:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+
+    EmailAccountInput:
+      type: object
+      required: [email, provider]
+      properties:
+        email:
+          type: string
+        provider:
+          type: string
+        smtpHost:
+          type: string
+        smtpPort:
+          type: integer
+        smtpUser:
+          type: string
+        smtpPassword:
+          type: string
+
+    # ── PROJECTS ─────────────────────────────────────────────────────────────
+    Project:
+      type: object
+      required: [id, name, status, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        techStack:
+          type: ["string", "null"]
+        targetAudience:
+          type: ["string", "null"]
+        status:
+          type: string
+        githubUrl:
+          type: ["string", "null"]
+        proposalGenerated:
+          type: boolean
+        codeGenerated:
+          type: boolean
+        estimatedCost:
+          type: ["number", "null"]
+        estimatedTimeline:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: ["string", "null"]
+
+    ProjectInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        techStack:
+          type: string
+        targetAudience:
+          type: string
+        estimatedCost:
+          type: number
+        estimatedTimeline:
+          type: string
+
+    ProjectUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        techStack:
+          type: string
+        targetAudience:
+          type: string
+        status:
+          type: string
+        estimatedCost:
+          type: number
+        estimatedTimeline:
+          type: string
+
+    ProjectGenerateResult:
+      type: object
+      required: [projectId, filesGenerated, message]
+      properties:
+        projectId:
+          type: integer
+        filesGenerated:
+          type: array
+          items:
+            type: string
+        message:
+          type: string
+        codePreview:
+          type: ["string", "null"]
+
+    GithubPushResult:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        repositoryUrl:
+          type: ["string", "null"]
+
+    ProjectProposal:
+      type: object
+      required: [projectId, projectName, executiveSummary, features, timeline, pricing]
+      properties:
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        executiveSummary:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        techStack:
+          type: array
+          items:
+            type: string
+        timeline:
+          type: string
+        pricing:
+          type: string
+        termsAndConditions:
+          type: string
