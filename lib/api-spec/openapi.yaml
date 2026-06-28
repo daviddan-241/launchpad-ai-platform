@@ -1,22 +1,35 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: LeadForge API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: leads
+    description: Lead management
+  - name: campaigns
+    description: Email campaigns
+  - name: chat
+    description: AI chat workspace
+  - name: settings
+    description: Settings and API keys
+  - name: analytics
+    description: Analytics and stats
+  - name: emails
+    description: Email sending
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +37,505 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/signup:
+    post:
+      operationId: signup
+      tags: [auth]
+      summary: Create account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /leads:
+    get:
+      operationId: getLeads
+      tags: [leads]
+      summary: Get all leads
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: country
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lead"
+    post:
+      operationId: createLead
+      tags: [leads]
+      summary: Create a lead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+
+  /leads/search:
+    post:
+      operationId: searchLeads
+      tags: [leads]
+      summary: Search/find leads globally
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadSearchInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadSearchResult"
+
+  /leads/import:
+    post:
+      operationId: importLeads
+      tags: [leads]
+      summary: Import leads (CSV or bulk)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadImportInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadImportResult"
+
+  /leads/{id}:
+    get:
+      operationId: getLead
+      tags: [leads]
+      summary: Get a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+    patch:
+      operationId: updateLead
+      tags: [leads]
+      summary: Update a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+    delete:
+      operationId: deleteLead
+      tags: [leads]
+      summary: Delete a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /campaigns:
+    get:
+      operationId: getCampaigns
+      tags: [campaigns]
+      summary: Get all campaigns
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Campaign"
+    post:
+      operationId: createCampaign
+      tags: [campaigns]
+      summary: Create a campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+
+  /campaigns/{id}:
+    get:
+      operationId: getCampaign
+      tags: [campaigns]
+      summary: Get a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+    patch:
+      operationId: updateCampaign
+      tags: [campaigns]
+      summary: Update a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+    delete:
+      operationId: deleteCampaign
+      tags: [campaigns]
+      summary: Delete a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /campaigns/{id}/send:
+    post:
+      operationId: sendCampaign
+      tags: [campaigns]
+      summary: Send/launch a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignSendResult"
+
+  /chat/sessions:
+    get:
+      operationId: getChatSessions
+      tags: [chat]
+      summary: Get chat sessions
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatSession"
+    post:
+      operationId: createChatSession
+      tags: [chat]
+      summary: Create a chat session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatSessionInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatSession"
+
+  /chat/sessions/{id}/messages:
+    get:
+      operationId: getChatMessages
+      tags: [chat]
+      summary: Get messages for a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatMessage"
+    post:
+      operationId: sendChatMessage
+      tags: [chat]
+      summary: Send a message and get AI response
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatMessageInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatMessageResponse"
+
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get user settings / API keys
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+    patch:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update settings / API keys
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+
+  /settings/test-email:
+    post:
+      operationId: testEmailSettings
+      tags: [settings]
+      summary: Test email SMTP connection
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /analytics/dashboard:
+    get:
+      operationId: getDashboard
+      tags: [analytics]
+      summary: Get dashboard stats
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /analytics/leads:
+    get:
+      operationId: getLeadAnalytics
+      tags: [analytics]
+      summary: Get lead analytics
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadAnalytics"
+
+  /emails/send:
+    post:
+      operationId: sendEmail
+      tags: [emails]
+      summary: Send a single email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendEmailInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +543,582 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required: [success]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        createdAt:
+          type: string
+      required: [id, name, email, createdAt]
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        token:
+          type: string
+      required: [user, token]
+
+    SignupInput:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+      required: [name, email, password]
+
+    LoginInput:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required: [email, password]
+
+    Lead:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        company:
+          type: ["string", "null"]
+        title:
+          type: ["string", "null"]
+        website:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        industry:
+          type: ["string", "null"]
+        status:
+          type: string
+        score:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+        linkedinUrl:
+          type: ["string", "null"]
+        source:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, userId, name, status, createdAt, updatedAt]
+
+    LeadInput:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        company:
+          type: string
+        title:
+          type: string
+        website:
+          type: string
+        country:
+          type: string
+        city:
+          type: string
+        industry:
+          type: string
+        status:
+          type: string
+        score:
+          type: integer
+        notes:
+          type: string
+        linkedinUrl:
+          type: string
+        source:
+          type: string
+      required: [name]
+
+    LeadUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        company:
+          type: string
+        title:
+          type: string
+        website:
+          type: string
+        country:
+          type: string
+        city:
+          type: string
+        industry:
+          type: string
+        status:
+          type: string
+        score:
+          type: integer
+        notes:
+          type: string
+        linkedinUrl:
+          type: string
+        source:
+          type: string
+
+    LeadSearchInput:
+      type: object
+      properties:
+        query:
+          type: string
+        industry:
+          type: string
+        country:
+          type: string
+        title:
+          type: string
+        companySize:
+          type: string
+        limit:
+          type: integer
+      required: [query]
+
+    LeadSearchResult:
+      type: object
+      properties:
+        leads:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeadCandidate"
+        total:
+          type: integer
+        source:
+          type: string
+      required: [leads, total, source]
+
+    LeadCandidate:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: ["string", "null"]
+        company:
+          type: ["string", "null"]
+        title:
+          type: ["string", "null"]
+        website:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        industry:
+          type: ["string", "null"]
+        linkedinUrl:
+          type: ["string", "null"]
+        confidence:
+          type: integer
+      required: [name, confidence]
+
+    LeadImportInput:
+      type: object
+      properties:
+        leads:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeadInput"
+      required: [leads]
+
+    LeadImportResult:
+      type: object
+      properties:
+        imported:
+          type: integer
+        skipped:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+      required: [imported, skipped, errors]
+
+    Campaign:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        name:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        fromName:
+          type: string
+        fromEmail:
+          type: string
+        status:
+          type: string
+        leadIds:
+          type: array
+          items:
+            type: integer
+        sentCount:
+          type: integer
+        openCount:
+          type: integer
+        replyCount:
+          type: integer
+        scheduledAt:
+          type: ["string", "null"]
+        sentAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, userId, name, subject, body, fromName, fromEmail, status, leadIds, sentCount, openCount, replyCount, createdAt, updatedAt]
+
+    CampaignInput:
+      type: object
+      properties:
+        name:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        fromName:
+          type: string
+        fromEmail:
+          type: string
+        leadIds:
+          type: array
+          items:
+            type: integer
+        scheduledAt:
+          type: string
+      required: [name, subject, body, fromName, fromEmail]
+
+    CampaignUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        fromName:
+          type: string
+        fromEmail:
+          type: string
+        leadIds:
+          type: array
+          items:
+            type: integer
+        status:
+          type: string
+        scheduledAt:
+          type: string
+
+    CampaignSendResult:
+      type: object
+      properties:
+        sent:
+          type: integer
+        failed:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+      required: [sent, failed, errors]
+
+    ChatSession:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        title:
+          type: string
+        status:
+          type: string
+        messageCount:
+          type: integer
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, userId, title, status, messageCount, createdAt, updatedAt]
+
+    ChatSessionInput:
+      type: object
+      properties:
+        title:
+          type: string
+      required: [title]
+
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        role:
+          type: string
+        content:
+          type: string
+        cards:
+          type: ["string", "null"]
+        actionType:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, sessionId, role, content, createdAt]
+
+    ChatMessageInput:
+      type: object
+      properties:
+        content:
+          type: string
+        cardResponse:
+          type: string
+      required: [content]
+
+    ChatMessageResponse:
+      type: object
+      properties:
+        userMessage:
+          $ref: "#/components/schemas/ChatMessage"
+        assistantMessage:
+          $ref: "#/components/schemas/ChatMessage"
+        autoProceeds:
+          type: boolean
+        autoProceedSeconds:
+          type: integer
+      required: [userMessage, assistantMessage, autoProceeds]
+
+    Settings:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        smtpHost:
+          type: ["string", "null"]
+        smtpPort:
+          type: ["integer", "null"]
+        smtpUser:
+          type: ["string", "null"]
+        smtpSecure:
+          type: boolean
+        hunterApiKey:
+          type: ["string", "null"]
+        apolloApiKey:
+          type: ["string", "null"]
+        openaiApiKey:
+          type: ["string", "null"]
+        googleSearchApiKey:
+          type: ["string", "null"]
+        googleSearchCx:
+          type: ["string", "null"]
+        defaultFromName:
+          type: ["string", "null"]
+        defaultFromEmail:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, userId, smtpSecure, createdAt, updatedAt]
+
+    SettingsUpdate:
+      type: object
+      properties:
+        smtpHost:
+          type: string
+        smtpPort:
+          type: integer
+        smtpUser:
+          type: string
+        smtpPassword:
+          type: string
+        smtpSecure:
+          type: boolean
+        hunterApiKey:
+          type: string
+        apolloApiKey:
+          type: string
+        openaiApiKey:
+          type: string
+        googleSearchApiKey:
+          type: string
+        googleSearchCx:
+          type: string
+        defaultFromName:
+          type: string
+        defaultFromEmail:
+          type: string
+
+    DashboardStats:
+      type: object
+      properties:
+        totalLeads:
+          type: integer
+        leadsThisWeek:
+          type: integer
+        campaignsSent:
+          type: integer
+        emailsSent:
+          type: integer
+        openRate:
+          type: number
+        replyRate:
+          type: number
+        topCountries:
+          type: array
+          items:
+            $ref: "#/components/schemas/CountryStat"
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityItem"
+        chatSessions:
+          type: integer
+      required: [totalLeads, leadsThisWeek, campaignsSent, emailsSent, openRate, replyRate, topCountries, recentActivity, chatSessions]
+
+    CountryStat:
+      type: object
+      properties:
+        country:
+          type: string
+        count:
+          type: integer
+      required: [country, count]
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+      required: [id, type, description, createdAt]
+
+    LeadAnalytics:
+      type: object
+      properties:
+        byStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusStat"
+        byCountry:
+          type: array
+          items:
+            $ref: "#/components/schemas/CountryStat"
+        byIndustry:
+          type: array
+          items:
+            $ref: "#/components/schemas/IndustryStat"
+        scoreDistribution:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreBucket"
+      required: [byStatus, byCountry, byIndustry, scoreDistribution]
+
+    StatusStat:
+      type: object
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+      required: [status, count]
+
+    IndustryStat:
+      type: object
+      properties:
+        industry:
+          type: string
+        count:
+          type: integer
+      required: [industry, count]
+
+    ScoreBucket:
+      type: object
+      properties:
+        range:
+          type: string
+        count:
+          type: integer
+      required: [range, count]
+
+    SendEmailInput:
+      type: object
+      properties:
+        to:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        fromName:
+          type: string
+        fromEmail:
+          type: string
+        leadId:
+          type: integer
+      required: [to, subject, body, fromName, fromEmail]
