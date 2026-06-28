@@ -35,15 +35,40 @@ router.get("/", async (req: AuthRequest, res) => {
 
 router.post("/", async (req: AuthRequest, res) => {
   try {
-    const { name, subject, body, fromName, fromEmail, leadIds = [], scheduledAt } = req.body as {
+    const { name, subject, body, fromName, fromEmail, leadIds = [], scheduledAt, followUpDays, followUpSubject, followUpBody } = req.body as {
       name: string; subject: string; body: string; fromName: string; fromEmail: string;
       leadIds?: number[]; scheduledAt?: string;
+      followUpDays?: number; followUpSubject?: string; followUpBody?: string;
     };
+
+    const [settings] = await db.select().from(settingsTable).where(eq(settingsTable.userId, req.userId!)).limit(1);
+    const resolvedFrom = fromName || settings?.defaultFromName || "";
+    const resolvedFromEmail = fromEmail || settings?.defaultFromEmail || "";
+
     const [campaign] = await db.insert(campaignsTable).values({
-      userId: req.userId!, name, subject, body, fromName, fromEmail,
+      userId: req.userId!, name, subject, body,
+      fromName: resolvedFrom, fromEmail: resolvedFromEmail,
       leadIds: JSON.stringify(leadIds),
       scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+      status: scheduledAt ? "scheduled" : "draft",
     }).returning();
+
+    if (followUpDays && followUpSubject && followUpBody && scheduledAt) {
+      const followUpDate = new Date(scheduledAt);
+      followUpDate.setDate(followUpDate.getDate() + followUpDays);
+      await db.insert(campaignsTable).values({
+        userId: req.userId!,
+        name: `${name} — Follow-up`,
+        subject: followUpSubject,
+        body: followUpBody,
+        fromName: resolvedFrom,
+        fromEmail: resolvedFromEmail,
+        leadIds: JSON.stringify(leadIds),
+        scheduledAt: followUpDate,
+        status: "scheduled",
+      });
+    }
+
     res.status(201).json(serializeCampaign(campaign));
   } catch (err) {
     req.log.error(err);
@@ -75,7 +100,10 @@ router.patch("/:id", async (req: AuthRequest, res) => {
     if (body.fromEmail !== undefined) update.fromEmail = body.fromEmail;
     if (body.status !== undefined) update.status = body.status;
     if (body.leadIds !== undefined) update.leadIds = JSON.stringify(body.leadIds);
-    if (body.scheduledAt !== undefined) update.scheduledAt = body.scheduledAt ? new Date(String(body.scheduledAt)) : null;
+    if (body.scheduledAt !== undefined) {
+      update.scheduledAt = body.scheduledAt ? new Date(String(body.scheduledAt)) : null;
+      if (body.scheduledAt && body.status === undefined) update.status = "scheduled";
+    }
 
     const [campaign] = await db.update(campaignsTable).set(update)
       .where(and(eq(campaignsTable.id, id), eq(campaignsTable.userId, req.userId!))).returning();
@@ -121,9 +149,17 @@ router.post("/:id/send", async (req: AuthRequest, res) => {
       auth: { user: settings.smtpUser, pass: settings.smtpPassword },
     });
 
-    const leads = await db.select().from(leadsTable)
-      .where(eq(leadsTable.userId, req.userId!));
+    await transporter.verify().catch(() => {
+      throw new Error("SMTP connection failed. Check your credentials in Settings.");
+    });
+
+    const leads = await db.select().from(leadsTable).where(eq(leadsTable.userId, req.userId!));
     const targetLeads = leads.filter(l => leadIds.includes(l.id) && l.email);
+
+    if (targetLeads.length === 0) {
+      res.status(400).json({ error: "No leads with email addresses found in this campaign." });
+      return;
+    }
 
     let sent = 0;
     const errors: string[] = [];
@@ -133,12 +169,19 @@ router.post("/:id/send", async (req: AuthRequest, res) => {
         const personalizedBody = campaign.body
           .replace(/{{name}}/g, lead.name)
           .replace(/{{company}}/g, lead.company || "your company")
+          .replace(/{{first_name}}/g, lead.name.split(" ")[0])
+          .replace(/{{title}}/g, lead.title || "")
+          .replace(/{{industry}}/g, lead.industry || "");
+
+        const personalizedSubject = campaign.subject
+          .replace(/{{name}}/g, lead.name)
+          .replace(/{{company}}/g, lead.company || "your company")
           .replace(/{{first_name}}/g, lead.name.split(" ")[0]);
 
         await transporter.sendMail({
           from: `"${campaign.fromName}" <${campaign.fromEmail}>`,
-          to: lead.email!,
-          subject: campaign.subject,
+          to: `"${lead.name}" <${lead.email!}>`,
+          subject: personalizedSubject,
           html: personalizedBody,
           text: personalizedBody.replace(/<[^>]*>/g, ""),
         });
@@ -158,10 +201,37 @@ router.post("/:id/send", async (req: AuthRequest, res) => {
     await db.insert(activityTable).values({
       userId: req.userId!,
       type: "campaign",
-      description: `Campaign "${campaign.name}" sent to ${sent} leads`,
+      description: `Campaign "${campaign.name}" sent to ${sent} of ${targetLeads.length} leads`,
     });
 
-    res.json({ sent, failed: errors.length, errors });
+    res.json({ sent, failed: errors.length, total: targetLeads.length, errors });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Server error" });
+  }
+});
+
+router.post("/:id/schedule", async (req: AuthRequest, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { scheduledAt } = req.body as { scheduledAt: string };
+    if (!scheduledAt) { res.status(400).json({ error: "scheduledAt is required" }); return; }
+
+    const [campaign] = await db.update(campaignsTable).set({
+      scheduledAt: new Date(scheduledAt),
+      status: "scheduled",
+      updatedAt: new Date(),
+    }).where(and(eq(campaignsTable.id, id), eq(campaignsTable.userId, req.userId!))).returning();
+
+    if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+    await db.insert(activityTable).values({
+      userId: req.userId!,
+      type: "campaign",
+      description: `Campaign "${campaign.name}" scheduled for ${new Date(scheduledAt).toLocaleString()}`,
+    });
+
+    res.json(serializeCampaign(campaign));
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Server error" });
