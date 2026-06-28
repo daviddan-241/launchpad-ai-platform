@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateSequencePlan } from "@/lib/demo-data";
+import { generateSequencePlan } from "@/lib/ai-sequence";
 
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => ({}))) as { prompt?: string };
-  const prompt = body.prompt?.trim() || "book meetings with high-fit B2B leaders";
+  const prompt = body.prompt?.trim() || "book meetings with high-fit B2B decision makers";
 
-  return NextResponse.json({
-    prompt,
-    plan: generateSequencePlan(prompt),
-  });
+  const plan = await generateSequencePlan(prompt);
+  return NextResponse.json({ prompt, plan });
 }

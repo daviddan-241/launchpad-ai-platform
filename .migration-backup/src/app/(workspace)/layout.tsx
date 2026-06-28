@@ -12,6 +12,7 @@ export default async function WorkspaceLayout({ children }: { children: React.Re
 
   if (!user) {
     redirect("/login");
+    return null;
   }
 
   const store = await readStore();

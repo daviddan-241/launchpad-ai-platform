@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logActivityEvent } from "@/lib/activity";
 import { requireCurrentUser } from "@/lib/auth";
-import { searchLeads } from "@/lib/demo-data";
 import { createId, readStore, updateStore } from "@/lib/store";
 
 type LeadShape = {
@@ -111,11 +110,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ query: "", count: store.leads.length, results: store.leads });
   }
 
-  const storeResults = searchLeads(query);
   const aiLeads = await aiSearchLeads(query);
 
+  // Also search real stored leads
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const storeMatches = store.leads.filter((lead) => {
+    const haystack = [lead.name, lead.company, lead.title, lead.industry, lead.region, ...lead.tags, ...lead.painPoints].join(" ").toLowerCase();
+    return tokens.some((t) => haystack.includes(t));
+  });
+
   const merged = [
-    ...storeResults,
+    ...storeMatches,
     ...aiLeads.map((l) => ({
       id: createId("LD"),
       name: l.name,
